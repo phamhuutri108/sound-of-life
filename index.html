@@ -799,7 +799,7 @@
       <div class="setting-label" id="txt-sensitivity">Sensitivity</div>
       <div class="slider-control">
         <span class="slider-label" id="txt-low">Low</span>
-        <input type="range" id="sensitivitySlider" min="0" max="100" value="50"
+        <input type="range" id="sensitivitySlider" min="0" max="100" value="70"
                oninput="sensitivity = parseInt(this.value)">
         <span class="slider-label" id="txt-high">High</span>
       </div>
@@ -970,7 +970,7 @@
   let cameraFacing = 'environment';
   let currentStream = null;
   let photoDataURL = null;
-  let sensitivity = 50;
+  let sensitivity = 70;
 
   /* ═══════════════════════════════════════════════════════════════
      AUDIO
@@ -986,11 +986,13 @@
     minor:      { notes: ['C3','D3','Eb3','F3','G3','Ab3','Bb3','C4','D4','Eb4','F4','G4','Ab4'] },
   };
 
-  async function initAudio() {
+  function initAudio() {
     if (audioReady) return;
-    await Tone.start();
-    audioReady = true;
-    setupInstruments();
+    // Must be called synchronously within user gesture (iOS Safari requirement)
+    Tone.start().then(() => {
+      audioReady = true;
+      setupInstruments();
+    }).catch(err => console.warn('Audio init error:', err));
   }
 
   function createAmbientSynth() {
@@ -1626,21 +1628,33 @@
     renderStaff(curScanX, lastDetectionResults);
   }
 
+  let loopStarted = false;
   function startAnimationLoop() {
+    if (loopStarted) return;
+    loopStarted = true;
     requestAnimationFrame(animationLoop);
   }
 
   /* ═══════════════════════════════════════════════════════════════
      STARTUP
   ═══════════════════════════════════════════════════════════════ */
-  async function onStart() {
-    await initAudio();
+  function onStart() {
+    initAudio(); // sync within gesture — do NOT await
     document.getElementById('splash').classList.add('hidden');
-    // Delay prevents tap event from propagating into mode cards beneath
     setTimeout(() => {
       document.getElementById('modeSelect').classList.remove('hidden');
     }, 350);
   }
+
+  // Fallback: tap anywhere in camera view retries audio unlock (iOS often needs this)
+  document.getElementById('cameraView').addEventListener('touchend', () => {
+    if (!audioReady) {
+      Tone.start().then(() => {
+        audioReady = true;
+        if (!instruments.ambient) setupInstruments();
+      }).catch(() => {});
+    }
+  }, { passive: true });
 
   // ResizeObserver + orientationchange to handle landscape/portrait
   const ro = new ResizeObserver(() => {
