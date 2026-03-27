@@ -487,16 +487,29 @@ button, .toolbar-btn, .segment-btn, .top-btn {
   position: fixed;
   bottom: 0; left: 0; right: 0;
   display: flex;
+  flex-direction: column;
   align-items: center;
-  justify-content: space-around;
-  padding: 12px 16px;
-  padding-bottom: max(12px, env(safe-area-inset-bottom));
+  padding: 14px 16px;
+  padding-bottom: max(14px, env(safe-area-inset-bottom));
   background: var(--bg-panel);
   backdrop-filter: blur(24px);
   -webkit-backdrop-filter: blur(24px);
   border-top: 1px solid var(--border-subtle);
   border-radius: 20px 20px 0 0;
   z-index: 50;
+}
+
+.toolbar-capture-row {
+  display: flex;
+  justify-content: center;
+  padding-bottom: 12px;
+}
+
+.toolbar-actions-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-around;
+  width: 100%;
 }
 
 .toolbar-btn {
@@ -855,6 +868,9 @@ button, .toolbar-btn, .segment-btn, .top-btn {
     justify-content: space-around;
   }
 
+  .toolbar-capture-row { padding-bottom: 0; }
+  .toolbar-actions-row { flex-direction: column; width: auto; }
+
   /* Hide text labels — no room in narrow sidebar */
   .toolbar-btn > span:last-child { display: none; }
 
@@ -875,7 +891,7 @@ button, .toolbar-btn, .segment-btn, .top-btn {
 ═══════════════════════════════════════ */
 .zoom-pill {
   position: fixed;
-  bottom: calc(104px + max(0px, env(safe-area-inset-bottom)));
+  bottom: calc(158px + max(0px, env(safe-area-inset-bottom)));
   left: 50%;
   transform: translateX(-50%);
   overflow: hidden;
