@@ -15,9 +15,13 @@ export const SCALES = {
 let masterBus = null;
 
 function createMasterBus() {
-  const comp = new Tone.Compressor({ threshold: -18, ratio: 4, attack: 0.005, release: 0.1 });
-  const limiter = new Tone.Limiter(-3);
-  comp.chain(limiter, Tone.getDestination());
+  // Lower threshold so compressor catches dynamics before makeup gain amplifies them
+  const comp = new Tone.Compressor({ threshold: -24, ratio: 5, attack: 0.005, release: 0.1 });
+  // Makeup gain boosts overall loudness for outdoor/speaker use
+  const makeupGain = new Tone.Volume(8);
+  // Limiter raised to -1 dB — lets signal go louder while still preventing clipping
+  const limiter = new Tone.Limiter(-1);
+  comp.chain(makeupGain, limiter, Tone.getDestination());
   return comp; // connect instruments → comp
 }
 
@@ -25,7 +29,7 @@ function createAmbientSynth() {
   const synth = new Tone.PolySynth(Tone.Synth, {
     oscillator: { type: 'sine' },
     envelope: { attack: 0.2, decay: 0.3, sustain: 0.5, release: 2.0 },
-    volume: -18,
+    volume: -12,
   });
   synth.maxPolyphony = 4;
   const reverb = new Tone.Freeverb({ roomSize: 0.75, dampening: 4000 });
@@ -38,7 +42,7 @@ function createPianoSynth() {
   const synth = new Tone.PolySynth(Tone.Synth, {
     oscillator: { type: 'triangle' },
     envelope: { attack: 0.01, decay: 0.5, sustain: 0.15, release: 0.8 },
-    volume: -14,
+    volume: -8,
   });
   synth.maxPolyphony = 4;
   const reverb = new Tone.Freeverb({ roomSize: 0.4, dampening: 3500 });
@@ -51,7 +55,7 @@ function createMarimbaSynth() {
   const synth = new Tone.PolySynth(Tone.Synth, {
     oscillator: { type: 'sine' },
     envelope: { attack: 0.001, decay: 0.35, sustain: 0.0, release: 0.4 },
-    volume: -12,
+    volume: -6,
   });
   synth.maxPolyphony = 4;
   const reverb = new Tone.Freeverb({ roomSize: 0.35, dampening: 5000 });
@@ -64,7 +68,7 @@ function createKalimbaSynth() {
   const synth = new Tone.PolySynth(Tone.Synth, {
     oscillator: { type: 'triangle8' },
     envelope: { attack: 0.005, decay: 0.5, sustain: 0.05, release: 1.2 },
-    volume: -14,
+    volume: -8,
   });
   synth.maxPolyphony = 4;
   const reverb = new Tone.Freeverb({ roomSize: 0.55, dampening: 2500 });
@@ -78,7 +82,7 @@ function createFluteSynth() {
   const synth = new Tone.PolySynth(Tone.Synth, {
     oscillator: { type: 'sine' },
     envelope: { attack: 0.12, decay: 0.1, sustain: 0.75, release: 1.2 },
-    volume: -15,
+    volume: -9,
   });
   synth.maxPolyphony = 3;
   const vibrato = new Tone.Vibrato({ frequency: 5.5, depth: 0.09, type: 'sine' });
@@ -134,7 +138,7 @@ export function setScale(name) {
 export function playNote(note, velocity = 0.7) {
   const synth = instruments[currentInstrument];
   if (synth && audioReady) {
-    synth.triggerAttackRelease(note, '8n', Tone.now(), Math.min(0.85, velocity));
+    synth.triggerAttackRelease(note, '8n', Tone.now(), Math.min(1.0, velocity));
   }
 }
 
@@ -144,7 +148,7 @@ export function getNoteForPosition(idx) {
 }
 
 export function confidenceToVelocity(conf) {
-  return 0.35 + conf * 0.5;
+  return 0.5 + conf * 0.5;
 }
 
 export function releaseAllInstruments() {
