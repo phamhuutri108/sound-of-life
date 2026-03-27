@@ -18,6 +18,7 @@ import {
   resizeCanvas,
   drawStaffLines, drawTrebleClef, drawNoteIndicator,
   renderStaff,
+  setShowClef, setShowGrid,
 } from './staff.js';
 import {
   cvReady,
@@ -423,6 +424,10 @@ function wireUI() {
   document.getElementById('sensitivitySlider').addEventListener('input', e => {
     sensitivity = parseInt(e.target.value);
   });
+
+  // Overlay toggles
+  document.getElementById('toggleClef').addEventListener('change', e => setShowClef(e.target.checked));
+  document.getElementById('toggleGrid').addEventListener('change', e => setShowGrid(e.target.checked));
 
   // Camera facing buttons in settings
   document.getElementById('btn-cam-front').addEventListener('click', () => setCameraFacing('user'));

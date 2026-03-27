@@ -5,6 +5,13 @@ const ctx = canvas.getContext('2d');
 
 export { canvas, ctx };
 
+// Overlay visibility flags (toggled via settings)
+export let showClef = true;
+export let showGrid = false;
+
+export function setShowClef(v) { showClef = v; }
+export function setShowGrid(v) { showGrid = v; }
+
 export function resizeCanvas() {
   const rect = document.getElementById('cameraView').getBoundingClientRect();
   const dpr = window.devicePixelRatio || 1;
@@ -117,12 +124,37 @@ export function drawNoteIndicator(x, y, active, confidence = 1) {
   ctx.fill();
 }
 
+export function drawGrid(sd) {
+  const cols = 8;
+  const rows = 12;
+  ctx.strokeStyle = 'rgba(255,255,255,0.1)';
+  ctx.lineWidth = 0.8;
+  ctx.setLineDash([]);
+  // horizontal lines
+  for (let r = 0; r <= rows; r++) {
+    const y = (sd.displayHeight / rows) * r;
+    ctx.beginPath();
+    ctx.moveTo(0, y);
+    ctx.lineTo(sd.displayWidth, y);
+    ctx.stroke();
+  }
+  // vertical lines
+  for (let c = 0; c <= cols; c++) {
+    const x = (sd.displayWidth / cols) * c;
+    ctx.beginPath();
+    ctx.moveTo(x, 0);
+    ctx.lineTo(x, sd.displayHeight);
+    ctx.stroke();
+  }
+}
+
 export function renderStaff(scanX, detectionResults, staffData, isPlaying) {
   if (!staffData) return;
   const sd = staffData;
   ctx.clearRect(0, 0, sd.displayWidth, sd.displayHeight);
+  if (showGrid) drawGrid(sd);
   drawStaffLines(sd);
-  drawTrebleClef(sd);
+  if (showClef) drawTrebleClef(sd);
   if (isPlaying && scanX >= sd.staffLeft && scanX <= sd.staffRight) {
     drawScanLine(scanX, sd);
   }
