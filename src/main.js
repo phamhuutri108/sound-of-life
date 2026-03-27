@@ -37,6 +37,11 @@ let photoImgEl = null;
 let sensitivity = 70;
 let staffData = null;
 
+// A2HS state — must be declared before wireUI() runs
+let _deferredInstallPrompt = null;
+let _a2hsPlatform = null;
+const SHARE_SVG = `<svg class="a2hs-share-svg" width="13" height="13" viewBox="0 0 13 13" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="6.5" y1="1" x2="6.5" y2="8.5"/><polyline points="4,3.5 6.5,1 9,3.5"/><path d="M2 6.5v4a1 1 0 001 1h7a1 1 0 001-1v-4"/></svg>`;
+
 /**
  * Compute the actual pixel bounds of a photo rendered with `background-size: contain`
  * inside #cameraView. Returns { x, y, w, h } in CSS pixels, or null if unavailable.
@@ -702,8 +707,8 @@ function getPinchDist(e) {
 ═══════════════════════════════════════════════════════════════ */
 function wireUI() {
   // Splash lang buttons
-  document.getElementById('langEN').addEventListener('click', () => setLanguage('en', { isPlaying }));
-  document.getElementById('langVI').addEventListener('click', () => setLanguage('vi', { isPlaying }));
+  document.getElementById('langEN').addEventListener('click', () => setLanguage('en', { isPlaying, onLangChange: updateA2HSHint }));
+  document.getElementById('langVI').addEventListener('click', () => setLanguage('vi', { isPlaying, onLangChange: updateA2HSHint }));
 
   // Mode select
   document.getElementById('modeCardPhoto').addEventListener('click', () => selectMode('photo'));
@@ -759,13 +764,31 @@ function wireUI() {
   });
 
   // Language buttons in settings
-  document.getElementById('set-langEN').addEventListener('click', () => setLanguage('en', { isPlaying }));
-  document.getElementById('set-langVI').addEventListener('click', () => setLanguage('vi', { isPlaying }));
+  document.getElementById('set-langEN').addEventListener('click', () => setLanguage('en', { isPlaying, onLangChange: updateA2HSHint }));
+  document.getElementById('set-langVI').addEventListener('click', () => setLanguage('vi', { isPlaying, onLangChange: updateA2HSHint }));
 
   // Camera view: fallback audio unlock on touch (iOS)
   document.getElementById('cameraView').addEventListener('touchend', () => {
     tryUnlockAudio();
   }, { passive: true });
+
+  // A2HS banner
+  document.getElementById('a2hsDismiss').addEventListener('click', () => {
+    document.getElementById('a2hsBanner').classList.add('hidden');
+    localStorage.setItem('a2hs-dismissed', '1');
+  });
+
+  document.getElementById('a2hsInstallBtn').addEventListener('click', async () => {
+    if (_deferredInstallPrompt) {
+      _deferredInstallPrompt.prompt();
+      const { outcome } = await _deferredInstallPrompt.userChoice;
+      _deferredInstallPrompt = null;
+      document.getElementById('a2hsBanner').classList.add('hidden');
+      if (outcome === 'accepted') localStorage.setItem('a2hs-dismissed', '1');
+    }
+  });
+
+  initA2HS();
 
   // Zoom dial (long-press) + preset buttons
   wireZoomDial();
@@ -840,4 +863,58 @@ if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', wireUI);
 } else {
   wireUI();
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   ADD TO HOME SCREEN
+═══════════════════════════════════════════════════════════════ */
+function updateA2HSHint() {
+  const hint = document.getElementById('a2hsHint');
+  if (!hint || !_a2hsPlatform) return;
+  if (_a2hsPlatform === 'ios') {
+    hint.innerHTML = `${SHARE_SVG} <span>${t('a2hs-ios')}</span>`;
+  } else if (_a2hsPlatform === 'android') {
+    // Native install prompt available — show just the description
+    hint.textContent = t('a2hs-android');
+  } else {
+    // android-manual: no native prompt, guide user via browser menu
+    hint.innerHTML = `<span class="a2hs-menu-dots">⋮</span> <span>${t('a2hs-android-manual')}</span>`;
+  }
+}
+
+function showA2HSBanner(platform) {
+  const banner = document.getElementById('a2hsBanner');
+  if (!banner) return;
+  _a2hsPlatform = platform;
+  const installBtn = document.getElementById('a2hsInstallBtn');
+  if (installBtn) installBtn.style.display = platform === 'android' ? 'block' : 'none';
+  updateA2HSHint();
+  banner.classList.remove('hidden');
+}
+
+function initA2HS() {
+  if (window.navigator.standalone || window.matchMedia('(display-mode: standalone)').matches) return;
+  if (localStorage.getItem('a2hs-dismissed')) return;
+  const ua = navigator.userAgent;
+  const isIOS = /iPad|iPhone|iPod/.test(ua) && !window.MSStream;
+  const isAndroid = /Android/.test(ua);
+  if (isIOS) {
+    showA2HSBanner('ios');
+  } else if (isAndroid) {
+    // Show immediately with manual instruction; upgrade to install button if prompt fires
+    showA2HSBanner('android-manual');
+  }
+}
+
+window.addEventListener('beforeinstallprompt', e => {
+  e.preventDefault();
+  _deferredInstallPrompt = e;
+  if (!localStorage.getItem('a2hs-dismissed') && !window.matchMedia('(display-mode: standalone)').matches) {
+    showA2HSBanner('android'); // upgrade to native install button
+  }
+});
+
+// Register service worker (required for Android PWA install prompt)
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('/sw.js').catch(() => {});
 }
