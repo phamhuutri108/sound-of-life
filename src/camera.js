@@ -131,7 +131,8 @@ export function capturePhoto({ staffData, noteCooldowns, t }) {
   const photoDataURL = captureCanvas.toDataURL('image/jpeg', 0.85);
 
   const preview = document.getElementById('photoPreview');
-  preview.style.backgroundImage = `url(${photoDataURL})`;
+  const previewImg = document.getElementById('photoPreviewImg');
+  previewImg.src = photoDataURL;
   preview.classList.add('active');
 
   // Cache Image element for detection
@@ -157,7 +158,8 @@ export function capturePhoto({ staffData, noteCooldowns, t }) {
 export function retakePhoto() {
   const video = document.getElementById('cameraVideo');
   document.getElementById('photoPreview').classList.remove('active');
-  document.getElementById('photoPreview').style.backgroundImage = '';
+  const previewImg = document.getElementById('photoPreviewImg');
+  if (previewImg) previewImg.src = '';
   video.style.opacity = '1';
   document.getElementById('captureBtn').classList.remove('retake');
 }
@@ -183,7 +185,8 @@ export function importPhoto({ staffData, noteCooldowns, t, onResult }) {
 
     decodeDone.then(() => {
       const preview = document.getElementById('photoPreview');
-      preview.style.backgroundImage = `url(${blobUrl})`;
+      const previewImg = document.getElementById('photoPreviewImg');
+      previewImg.src = blobUrl;
       preview.classList.add('active');
 
       // Hide live video

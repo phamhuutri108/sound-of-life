@@ -131,7 +131,9 @@
     <!-- Zoom container: scale this to zoom in, overflow clipped -->
     <div id="zoomContainer">
       <video id="cameraVideo" class="camera-video" playsinline autoplay muted></video>
-      <div class="photo-preview" id="photoPreview"></div>
+      <div class="photo-preview" id="photoPreview">
+        <img id="photoPreviewImg" alt="" draggable="false">
+      </div>
     </div>
 
     <!-- Canvas stays outside zoom so overlay never scales with camera -->
@@ -208,15 +210,15 @@
     <div class="zoom-dial-value" id="zoomDialValue">1×</div>
   </div>
 
+  <!-- Capture button: fixed top-center, outside toolbar -->
+  <button class="capture-btn" id="captureBtn" style="display:none"></button>
+
   <!-- ═══════════════════════════════════════
        BOTTOM TOOLBAR
   ═══════════════════════════════════════ -->
   <div class="bottom-toolbar" id="bottomToolbar" style="display:none">
-    <!-- Single row: all actions inline -->
+    <!-- Single row: actions only, capture btn is separate -->
     <div class="toolbar-actions-row">
-      <!-- Capture button inline -->
-      <button class="capture-btn" id="captureBtn"></button>
-
       <!-- Play / Pause -->
       <button class="toolbar-btn active" id="playBtn">
         <span class="toolbar-btn-icon" id="playIcon">

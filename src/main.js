@@ -381,9 +381,29 @@ function getDetectionInterval() {
 }
 
 let _renderTick = 0;
+let _pageVisible = true;
+
+document.addEventListener('visibilitychange', () => {
+  _pageVisible = document.visibilityState === 'visible';
+});
+
+// requestVideoFrameCallback: sync detection to actual camera frames on supported browsers
+let _rvfcSupported = false;
+let _latestVideoFrame = null; // set by rVFC callback, read in animationLoop
+function _scheduleRVFC() {
+  if (!_liveVideoEl) _liveVideoEl = document.getElementById('cameraVideo');
+  if (_liveVideoEl && 'requestVideoFrameCallback' in HTMLVideoElement.prototype) {
+    _rvfcSupported = true;
+    _liveVideoEl.requestVideoFrameCallback((now, meta) => {
+      _latestVideoFrame = meta.mediaTime;
+      _scheduleRVFC();
+    });
+  }
+}
 
 function animationLoop(now) {
   requestAnimationFrame(animationLoop);
+  if (!_pageVisible) return; // tab hidden — skip everything
   updateFpsEstimate(now);
   applyPerformanceTuning(now);
   _renderTick++;
@@ -406,12 +426,14 @@ function animationLoop(now) {
     // Only detect when we have a source
     if (!_liveVideoEl) _liveVideoEl = document.getElementById('cameraVideo');
     const video = _liveVideoEl;
-    // In live mode, skip detection if the camera hasn't produced a new frame yet
-    // (prevents redundant getImageData on the same stale frame)
+    // In live mode, skip detection if the camera hasn't produced a new frame yet.
+    // Uses rVFC timestamp when available (exact); falls back to currentTime.
     if (appMode === 'live' && video.readyState >= 2) {
-      const vt = video.currentTime;
+      const vt = _rvfcSupported ? _latestVideoFrame : video.currentTime;
       if (vt === _lastDetectedVideoTime) { lastDetectionTime = now - activeInterval + 16; return; }
       _lastDetectedVideoTime = vt;
+      // Start rVFC on first detection if not already running
+      if (!_rvfcSupported) _scheduleRVFC();
     }
     const hasSource = (appMode === 'photo' && photoDataURL) || (appMode === 'live' && video.readyState >= 2);
     if (hasSource) {
@@ -426,28 +448,27 @@ function animationLoop(now) {
 
       // Trigger notes from detection results
       if (lastDetectionResults && isAudioReady()) {
-        // Keep only strongest detection per pitch lane
-        const strongestByNote = new Map();
+        // Keep only strongest detection per pitch lane — plain object avoids Map allocation
+        const strongestConf = {};
+        const strongestIdx  = {};
         for (const result of lastDetectionResults) {
           if (!result.detected) continue;
-          const noteIdx = result.noteIndex !== undefined ? result.noteIndex : 0;
-          const prev = strongestByNote.get(noteIdx);
-          if (!prev || result.confidence > prev.confidence) {
-            strongestByNote.set(noteIdx, result);
+          const noteIdx = result.noteIndex ?? 0;
+          if (strongestConf[noteIdx] === undefined || result.confidence > strongestConf[noteIdx]) {
+            strongestConf[noteIdx] = result.confidence;
+            strongestIdx[noteIdx]  = noteIdx;
           }
         }
-
-        const candidates = Array.from(strongestByNote.entries())
-          .map(([noteIdx, result]) => ({ noteIdx, confidence: result.confidence }))
-          .sort((a, b) => b.confidence - a.confidence)
-          .slice(0, MAX_NOTES_PER_PASS);
-
-        for (const c of candidates) {
+        // Sort descending by confidence, cap at MAX_NOTES_PER_PASS
+        const keys = Object.keys(strongestConf);
+        keys.sort((a, b) => strongestConf[b] - strongestConf[a]);
+        const limit = Math.min(keys.length, MAX_NOTES_PER_PASS);
+        for (let ki = 0; ki < limit; ki++) {
           if (now - lastAnyNoteTime < GLOBAL_NOTE_GAP_MS) break;
-          const noteId = `edge_note_${c.noteIdx}`;
+          const noteIdx = +keys[ki];
+          const noteId = `edge_note_${noteIdx}`;
           if (!shouldTriggerNote(noteId, now, NOTE_COOLDOWN_MS)) continue;
-
-          playNote(getNoteForPosition(c.noteIdx), confidenceToVelocity(c.confidence));
+          playNote(getNoteForPosition(noteIdx), confidenceToVelocity(strongestConf[noteIdx]));
           lastAnyNoteTime = now;
         }
       }

@@ -14,7 +14,8 @@ export function setShowGrid(v) { showGrid = v; }
 
 export function resizeCanvas(bounds) {
   const rect = document.getElementById('cameraView').getBoundingClientRect();
-  const dpr = window.devicePixelRatio || 1;
+  // Cap DPR at 2 — DPR-3 screens fill 9× the pixels for ~0 visible improvement
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
   canvas.width  = rect.width  * dpr;
   canvas.height = rect.height * dpr;
   canvas.style.width  = rect.width  + 'px';
@@ -24,7 +25,8 @@ export function resizeCanvas(bounds) {
 }
 
 export function calculateStaffPositions(canvasW, canvasH, bounds) {
-  const dpr = window.devicePixelRatio || 1;
+  // Must match the capped DPR used in resizeCanvas
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
   const W = canvasW / dpr;
   const H = canvasH / dpr;
   // When a photo is letterboxed, constrain staff to the photo's actual display area
@@ -51,8 +53,8 @@ export function calculateStaffPositions(canvasW, canvasH, bounds) {
   return {
     positions, spacing,
     staffTop, staffBottom,
-    staffLeft:  bx + bw * 0.12,
-    staffRight: bx + bw * 0.97,
+    staffLeft:  bx + bw * 0.16,
+    staffRight: bx + bw * 0.95,
     displayWidth: W,
     displayHeight: H,
   };
@@ -85,9 +87,14 @@ export function drawStaffLines(sd, c = ctx) {
 }
 
 export function drawTrebleClef(sd, c = ctx) {
-  const clefX = sd.staffLeft - 4;
+  // Cap font size: treble clef must fit within the left margin (staffLeft from canvas edge)
+  // textAlign=center means half the char width extends left of clefX
+  // Empirically the 𝄞 glyph is ~0.4× font-size wide, so maxSize = staffLeft / 0.5 * 0.8
+  const maxByMargin = sd.staffLeft * 1.4;
+  const maxByHeight = (sd.staffBottom - sd.staffTop) * 0.65;
+  const clefSize = Math.min(maxByMargin, maxByHeight, 160);
+  const clefX = sd.staffLeft - clefSize * 0.18;
   const clefY = (sd.staffTop + sd.staffBottom) / 2;
-  const clefSize = (sd.staffBottom - sd.staffTop) * 1.0;
   c.fillStyle = 'rgba(255, 255, 255, 0.78)';
   c.font = `${clefSize}px serif`;
   c.textAlign = 'center';
@@ -159,8 +166,14 @@ function _ensureBg(sd) {
   const bc = _bgCanvas.getContext('2d');
   bc.setTransform(dpr, 0, 0, dpr, 0, 0);
   bc.clearRect(0, 0, sd.displayWidth, sd.displayHeight);
+  // Clip to display bounds so nothing bleeds off-screen
+  bc.save();
+  bc.beginPath();
+  bc.rect(0, 0, sd.displayWidth, sd.displayHeight);
+  bc.clip();
   if (showGrid) drawStaffLines(sd, bc);
   if (showClef) drawTrebleClef(sd, bc);
+  bc.restore();
   _bgKey = key;
   return _bgCanvas;
 }
