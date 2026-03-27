@@ -3,6 +3,6 @@ import { defineConfig } from 'vite';
 export default defineConfig({
   base: '/',
   optimizeDeps: {
-    exclude: ['@mediapipe/tasks-vision'],
+    exclude: ['@mediapipe/tasks-vision', 'onnxruntime-web'],
   },
 });

@@ -170,10 +170,10 @@ export function detectObjects({ appMode, photoImgEl, staffData, scanX, sensitivi
       const video = document.getElementById('cameraVideo');
       const source = (appMode === 'photo' && photoImgEl) ? photoImgEl : video;
       if (source) {
-          runInference(source); // fire-and-forget
+          runInference(source, { appMode, staffData, sensitivity }); // fire-and-forget
       }
   
-      const transitions = getEdgeTransitions(staffData, scanX);
+      const transitions = getEdgeTransitions(staffData, scanX, sensitivity);
       if (transitions) {
         // Return new format: array of {y, confidence, noteIndex}
         return transitions.map(t => ({

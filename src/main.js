@@ -25,7 +25,7 @@ import {
   noteCooldowns, shouldTriggerNote,
   detectObjects as _detectObjects,
 } from './detection.js';
-import { loadSmartModel, isSmartReady, drawDetections } from './smartDetection.js';
+import { loadSmartModel, isSmartReady, drawDetections, getSmartBackend } from './smartDetection.js';
 
 /* ═══════════════════════════════════════════════════════════════
    APP STATE
@@ -307,8 +307,11 @@ function setCameraFacing(facing) {
 ═══════════════════════════════════════════════════════════════ */
 let lastDetectionTime = 0;
 let lastDetectionResults = null;
-const DETECTION_INTERVAL = 200; // ~5fps — lighter on mobile
-const MAX_NOTES_PER_PASS = 2;   // prevent audio overload
+const isHighEndIPhone = /iPhone/i.test(navigator.userAgent || '')
+  && (navigator.hardwareConcurrency || 4) >= 6
+  && (window.devicePixelRatio || 1) >= 3;
+const BASE_DETECTION_INTERVAL = isHighEndIPhone ? 120 : 180;
+const MAX_NOTES_PER_PASS = isHighEndIPhone ? 3 : 2;
 
 function animationLoop(now) {
   requestAnimationFrame(animationLoop);
@@ -325,7 +328,9 @@ function animationLoop(now) {
   const curScanX = advanceScanLine();
 
   // Detection (throttled)
-  if (now - lastDetectionTime > DETECTION_INTERVAL) {
+  const activeBackend = getSmartBackend();
+  const activeInterval = activeBackend === 'yolo' ? BASE_DETECTION_INTERVAL : (BASE_DETECTION_INTERVAL + 40);
+  if (now - lastDetectionTime > activeInterval) {
     lastDetectionTime = now;
 
     // Only detect when we have a source
@@ -350,7 +355,8 @@ function animationLoop(now) {
 
           // Use noteIndex (from Y position) instead of fixed index
           const noteIdx = result.noteIndex !== undefined ? result.noteIndex : 0;
-          const noteId = `note_y_${Math.round(result.y || 0)}`;
+          const yBin = Math.round((result.y || 0) / 12);
+          const noteId = `note_lane_${noteIdx}_ybin_${yBin}`;
 
           if (shouldTriggerNote(noteId, now, 250)) {
             playNote(getNoteForPosition(noteIdx), confidenceToVelocity(result.confidence));
