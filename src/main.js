@@ -291,7 +291,6 @@ let zoomHwMax  = ZOOM_MAX_DEFAULT;
 
 // Auto-hide pill
 let zoomHideTimer = null;
-let zoomPillVisible = false;
 
 function initCameraZoom() {
   zoomTrack = null;
@@ -341,11 +340,9 @@ function _applyCSSZoom(z) {
 function bumpZoomPillVisible() {
   const pill = document.getElementById('zoomControls');
   pill.style.opacity = '1';
-  zoomPillVisible = true;
   clearTimeout(zoomHideTimer);
   zoomHideTimer = setTimeout(() => {
     pill.style.opacity = '0';
-    zoomPillVisible = false;
   }, 3000);
 }
 
@@ -359,6 +356,155 @@ function updateZoomPill() {
     const btn = document.getElementById(id);
     const isActive = Math.abs(currentZoom - z) < 0.08;
     btn.classList.toggle('active', isActive);
+  });
+}
+
+/* ── Zoom dial (long-press rotary wheel) ── */
+let dialActive   = false;
+let dialTouchX   = 0;
+let dialTouchZoom = 1;
+let dialHideTimer = null;
+const DIAL_PX_PER_LOG = 220; // ~375px to go from 1× to 5×
+
+function showZoomDial(startX) {
+  clearTimeout(dialHideTimer);
+  dialTouchX    = startX;
+  dialTouchZoom = currentZoom;
+  dialActive    = true;
+  const el = document.getElementById('zoomDialOverlay');
+  el.style.display = '';
+  requestAnimationFrame(() => { el.style.opacity = '1'; });
+  renderZoomDial();
+  if (navigator.vibrate) navigator.vibrate(10);
+}
+
+function hideZoomDial() {
+  dialActive = false;
+  const el = document.getElementById('zoomDialOverlay');
+  el.style.opacity = '0';
+  dialHideTimer = setTimeout(() => { el.style.display = 'none'; }, 320);
+}
+
+function renderZoomDial() {
+  const canvas = document.getElementById('zoomDialCanvas');
+  if (!canvas) return;
+  const dpr = window.devicePixelRatio || 1;
+  const W   = canvas.offsetWidth;
+  const H   = canvas.offsetHeight;
+  canvas.width  = W * dpr;
+  canvas.height = H * dpr;
+  const dc = canvas.getContext('2d');
+  dc.scale(dpr, dpr);
+  dc.clearRect(0, 0, W, H);
+
+  // Circle center sits below canvas so only the top arc shows
+  const cx = W / 2;
+  const cy = H + 40;
+  const R  = Math.min(W * 0.94, 440);
+
+  const logMin = Math.log(ZOOM_MIN);
+  const logMax = Math.log(Math.max(zoomMax, 5));
+  const logCur = Math.log(Math.max(ZOOM_MIN, currentZoom));
+  const HALF_ARC = Math.PI * 0.68; // ±123° visible arc
+
+  // angle for any log-zoom relative to current (current = top = -π/2)
+  const logToAngle = (lz) =>
+    -Math.PI / 2 + ((lz - logCur) / (logMax - logMin)) * HALF_ARC * 2;
+
+  // Faint background arc track
+  dc.beginPath();
+  dc.arc(cx, cy, R, logToAngle(logMin), logToAngle(logMax));
+  dc.strokeStyle = 'rgba(255,255,255,0.10)';
+  dc.lineWidth = 1;
+  dc.stroke();
+
+  // Tick marks — fine every 0.1, major at .5 / 1 / 1.5 / 2 / 3 / 4 / 5 / 6 / 8
+  const MAJOR_SET = new Set([0.5, 1, 1.5, 2, 3, 4, 5, 6, 8]);
+  const step = 0.1;
+  for (let z = ZOOM_MIN; z <= zoomMax + 0.01; z = Math.round((z + step) * 10) / 10) {
+    const logZ  = Math.log(z);
+    const angle = logToAngle(logZ);
+    if (Math.abs(angle + Math.PI / 2) > HALF_ARC + 0.05) continue;
+
+    const isMajor  = MAJOR_SET.has(Math.round(z * 10) / 10);
+    const isCur    = Math.abs(z - currentZoom) < 0.07;
+    const tickLen  = isMajor ? 18 : 9;
+    const x1 = cx + R * Math.cos(angle);
+    const y1 = cy + R * Math.sin(angle);
+    const x2 = cx + (R - tickLen) * Math.cos(angle);
+    const y2 = cy + (R - tickLen) * Math.sin(angle);
+
+    dc.beginPath();
+    dc.moveTo(x1, y1);
+    dc.lineTo(x2, y2);
+    dc.strokeStyle = isCur
+      ? '#ffd600'
+      : isMajor
+        ? 'rgba(255,255,255,0.75)'
+        : 'rgba(255,255,255,0.28)';
+    dc.lineWidth = isMajor ? 1.8 : 1;
+    dc.stroke();
+
+    // Label major ticks (except current — shown by big text above)
+    if (isMajor && !isCur) {
+      const lx = cx + (R - 34) * Math.cos(angle);
+      const ly = cy + (R - 34) * Math.sin(angle);
+      dc.font = '400 11px Montserrat, sans-serif';
+      dc.fillStyle = 'rgba(255,255,255,0.55)';
+      dc.textAlign = 'center';
+      dc.textBaseline = 'middle';
+      dc.fillText(z + '×', lx, ly);
+    }
+  }
+
+  // Fixed ▼ pointer at top center
+  const px = cx;
+  const py = cy - R + 2;
+  dc.beginPath();
+  dc.moveTo(px, py + 12);
+  dc.lineTo(px - 7, py + 1);
+  dc.lineTo(px + 7, py + 1);
+  dc.closePath();
+  dc.fillStyle = '#ffd600';
+  dc.fill();
+
+  // Value label
+  document.getElementById('zoomDialValue').textContent = currentZoom.toFixed(1) + '×';
+}
+
+function wireZoomDial() {
+  const overlay = document.getElementById('zoomDialOverlay');
+
+  // Touch on dial → drag to zoom
+  overlay.addEventListener('touchstart', e => {
+    if (e.touches.length === 1) {
+      dialTouchX    = e.touches[0].clientX;
+      dialTouchZoom = currentZoom;
+    }
+  }, { passive: true });
+
+  overlay.addEventListener('touchmove', e => {
+    if (!dialActive || e.touches.length !== 1) return;
+    const dx = e.touches[0].clientX - dialTouchX;
+    const newLogZ = Math.log(Math.max(ZOOM_MIN, dialTouchZoom)) + dx / DIAL_PX_PER_LOG;
+    applyZoom(Math.exp(newLogZ));
+    renderZoomDial();
+  }, { passive: true });
+
+  overlay.addEventListener('touchend', () => {
+    clearTimeout(dialHideTimer);
+    dialHideTimer = setTimeout(hideZoomDial, 1800);
+  }, { passive: true });
+
+  // Long press on any zoom-btn → show dial
+  document.querySelectorAll('.zoom-btn').forEach(btn => {
+    let lpTimer = null;
+    btn.addEventListener('touchstart', e => {
+      const startX = e.touches[0].clientX;
+      lpTimer = setTimeout(() => { showZoomDial(startX); }, 320);
+    }, { passive: true });
+    btn.addEventListener('touchend',  () => clearTimeout(lpTimer), { passive: true });
+    btn.addEventListener('touchmove', () => clearTimeout(lpTimer), { passive: true });
   });
 }
 
@@ -441,6 +587,9 @@ function wireUI() {
   document.getElementById('cameraView').addEventListener('touchend', () => {
     tryUnlockAudio();
   }, { passive: true });
+
+  // Zoom dial (long-press) + preset buttons
+  wireZoomDial();
 
   // Zoom preset buttons
   [
