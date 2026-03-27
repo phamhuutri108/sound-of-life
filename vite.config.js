@@ -1,7 +1,7 @@
 import { defineConfig } from 'vite';
 
 export default defineConfig({
-  base: '/',
+  base: process.env.BASE_PATH || '/',
   optimizeDeps: {
     exclude: ['@mediapipe/tasks-vision'],
   },
