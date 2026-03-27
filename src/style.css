@@ -489,20 +489,18 @@ button, .toolbar-btn, .segment-btn, .top-btn {
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 14px 16px;
-  padding-bottom: max(14px, env(safe-area-inset-bottom));
-  background: var(--bg-panel);
-  backdrop-filter: blur(24px);
-  -webkit-backdrop-filter: blur(24px);
-  border-top: 1px solid var(--border-subtle);
+  padding: 8px 12px;
+  padding-bottom: max(8px, env(safe-area-inset-bottom));
+  background: rgba(10, 20, 8, 0.45);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-top: 1px solid rgba(255,255,255,0.08);
   border-radius: 20px 20px 0 0;
   z-index: 50;
 }
 
 .toolbar-capture-row {
-  display: flex;
-  justify-content: center;
-  padding-bottom: 12px;
+  display: none; /* capture button moved inline into actions row */
 }
 
 .toolbar-actions-row {
@@ -536,10 +534,10 @@ button, .toolbar-btn, .segment-btn, .top-btn {
 .toolbar-btn-icon { font-size: 22px; line-height: 1; }
 
 .capture-btn {
-  width: 64px;
-  height: 64px;
+  width: 48px;
+  height: 48px;
   border-radius: 50%;
-  border: 3px solid var(--text-primary);
+  border: 2.5px solid var(--text-primary);
   background: transparent;
   position: relative;
   cursor: pointer;
