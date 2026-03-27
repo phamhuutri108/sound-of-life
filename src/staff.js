@@ -96,25 +96,24 @@ export function drawTrebleClef(sd, c = ctx) {
 }
 
 export function drawScanLine(scanX, sd) {
-  // 3 fillRects instead of createLinearGradient — much cheaper on mobile GPU
-  ctx.fillStyle = 'rgba(170,230,130,0.15)';
+  ctx.fillStyle = 'rgba(255,255,255,0.10)';
   ctx.fillRect(scanX - 7, 0, 14, sd.displayHeight);
-  ctx.fillStyle = 'rgba(185,240,140,0.50)';
+  ctx.fillStyle = 'rgba(255,255,255,0.40)';
   ctx.fillRect(scanX - 3, 0, 6, sd.displayHeight);
-  ctx.fillStyle = 'rgba(190,245,150,0.88)';
+  ctx.fillStyle = 'rgba(255,255,255,0.85)';
   ctx.fillRect(scanX - 1, 0, 2, sd.displayHeight);
 }
 
 // Only called for ACTIVE notes; passive dots are batched in renderStaff
 function drawNoteIndicator(x, y, confidence = 1) {
   const alpha = 0.5 + confidence * 0.5;
-  // Outer glow — plain circle, no RadialGradient (expensive on mobile)
-  ctx.fillStyle = `rgba(120,176,74,${(alpha * 0.28).toFixed(2)})`;
+  // Outer glow
+  ctx.fillStyle = `rgba(255,255,255,${(alpha * 0.22).toFixed(2)})`;
   ctx.beginPath();
   ctx.arc(x, y, 22, 0, Math.PI * 2);
   ctx.fill();
   // Note head ellipse
-  ctx.fillStyle = `rgba(210,248,185,${alpha.toFixed(2)})`;
+  ctx.fillStyle = `rgba(255,255,255,${alpha.toFixed(2)})`;
   ctx.beginPath();
   ctx.ellipse(x, y, 8, 6, -0.3, 0, Math.PI * 2);
   ctx.fill();
@@ -123,7 +122,7 @@ function drawNoteIndicator(x, y, confidence = 1) {
 export function drawGrid(sd) {
   const cols = 8;
   const rows = 12;
-  ctx.strokeStyle = 'rgba(185,220,165,0.25)';
+  ctx.strokeStyle = 'rgba(255,255,255,0.15)';
   ctx.lineWidth = 1;
   ctx.setLineDash([]);
   // horizontal lines
@@ -182,7 +181,7 @@ export function renderStaff(scanX, detectionResults, staffData, isPlaying) {
   }
 
   // All 13 passive dots in one batched path → single fill() call
-  ctx.fillStyle = 'rgba(185,220,165,0.14)';
+  ctx.fillStyle = 'rgba(255,255,255,0.18)';
   ctx.beginPath();
   for (const pos of sd.positions) {
     ctx.moveTo(scanX + 3.5, pos.y);
