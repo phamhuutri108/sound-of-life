@@ -279,7 +279,7 @@ function startAnimationLoop() {
 /* ═══════════════════════════════════════════════════════════════
    ZOOM — real camera zoom (applyConstraints) with CSS scale fallback
 ═══════════════════════════════════════════════════════════════ */
-const ZOOM_MIN = 1;
+const ZOOM_MIN = 0.5;
 const ZOOM_MAX_DEFAULT = 5;
 let currentZoom = 1;
 let zoomMax = ZOOM_MAX_DEFAULT;
@@ -319,11 +319,14 @@ function applyZoom(z) {
   if (zoomTrack) {
     const hwZ = Math.min(zoomHwMax, Math.max(zoomHwMin, currentZoom));
     zoomTrack.applyConstraints({ advanced: [{ zoom: hwZ }] }).catch(() => {
-      // hardware zoom failed — CSS fallback
       _applyCSSZoom(currentZoom);
     });
-    // Clear CSS scale when using hardware zoom
-    document.getElementById('zoomContainer').style.transform = '';
+    // Below hardware min (e.g. 0.5× on camera that starts at 1×) → CSS scale
+    if (currentZoom < zoomHwMin) {
+      _applyCSSZoom(currentZoom);
+    } else {
+      document.getElementById('zoomContainer').style.transform = '';
+    }
   } else {
     _applyCSSZoom(currentZoom);
   }
@@ -334,7 +337,7 @@ function applyZoom(z) {
 
 function _applyCSSZoom(z) {
   document.getElementById('zoomContainer').style.transform =
-    z <= 1.0001 ? '' : `scale(${z})`;
+    Math.abs(z - 1) < 0.001 ? '' : `scale(${z})`;
 }
 
 function bumpZoomPillVisible() {
@@ -348,15 +351,24 @@ function bumpZoomPillVisible() {
 
 function updateZoomPill() {
   const presetDefs = [
-    { id: 'zoomBtn1', z: 1 },
-    { id: 'zoomBtn2', z: 2 },
-    { id: 'zoomBtn3', z: 3 },
+    { id: 'zoomBtn05', z: 0.5 },
+    { id: 'zoomBtn1',  z: 1   },
+    { id: 'zoomBtn2',  z: 2   },
+    { id: 'zoomBtn3',  z: 3   },
   ];
-  presetDefs.forEach(({ id, z }) => {
+  let activeIdx = 1; // default to 1×
+  presetDefs.forEach(({ id, z }, i) => {
     const btn = document.getElementById(id);
-    const isActive = Math.abs(currentZoom - z) < 0.08;
+    const isActive = Math.abs(currentZoom - z) < 0.15;
     btn.classList.toggle('active', isActive);
+    if (isActive) activeIdx = i;
   });
+  // Slide track so active button is centered in the 150px window
+  // Each button step = 46px width + 6px gap = 52px
+  // center of index i in track = i * 52 + 23; window center = 75
+  // translateX = 75 - (activeIdx * 52 + 23) = 52 - activeIdx * 52
+  const translateX = 52 - activeIdx * 52;
+  document.getElementById('zoomTrack').style.transform = `translateX(${translateX}px)`;
 }
 
 /* ── Zoom dial (long-press rotary wheel) ── */
@@ -364,7 +376,9 @@ let dialActive   = false;
 let dialTouchX   = 0;
 let dialTouchZoom = 1;
 let dialHideTimer = null;
-const DIAL_PX_PER_LOG = 220; // ~375px to go from 1× to 5×
+let dialLastHapticZoom = 1;
+const DIAL_PX_PER_LOG = 90; // px per natural-log unit — lower = more sensitive
+const DIAL_PRESETS_HAPTIC = [0.5, 1, 2, 3, 4, 5];
 
 function showZoomDial(startX) {
   clearTimeout(dialHideTimer);
@@ -408,13 +422,13 @@ function renderZoomDial() {
   dc.fillStyle = bg;
   dc.fillRect(0, 0, W, H);
 
-  // Arc geometry — large circle, center below canvas so only top arc visible
+  // Arc geometry — compact circle, center slightly below canvas
   const cx = W / 2;
-  const cy = H + 55;
-  const R  = Math.min(W * 0.92, 420);
+  const cy = H + 20;
+  const R  = Math.min(W * 0.75, 280);
 
-  // Which presets are available given zoomMax?
-  const presets = [1, 2, 3].filter(z => z <= zoomMax + 0.5);
+  // Which presets are available given zoom range?
+  const presets = [0.5, 1, 2, 3].filter(z => z >= ZOOM_MIN && z <= zoomMax + 0.5);
 
   const logMin = Math.log(ZOOM_MIN);
   const logMax = Math.log(Math.max(zoomMax, presets[presets.length - 1]));
@@ -460,7 +474,7 @@ function renderZoomDial() {
   }
 
   // Preset nodes — circular buttons on the arc
-  const NODE_R = 22; // radius of the circle node
+  const NODE_R = 18; // radius of the circle node
   presets.forEach(z => {
     const lz    = Math.log(z);
     const angle = logToAngle(lz);
@@ -506,16 +520,27 @@ function renderZoomDial() {
   document.getElementById('zoomDialValue').textContent = currentZoom.toFixed(1) + '×';
 }
 
+function dialDragUpdate(clientX) {
+  const dx = clientX - dialTouchX;
+  // LEFT drag = zoom in (higher values toward pointer), RIGHT = zoom out
+  const newLogZ = Math.log(Math.max(ZOOM_MIN, dialTouchZoom)) - dx / DIAL_PX_PER_LOG;
+  const prev = currentZoom;
+  applyZoom(Math.exp(newLogZ));
+  // Haptic pulse when crossing a preset threshold
+  DIAL_PRESETS_HAPTIC.forEach(p => {
+    const crossed = (prev < p && currentZoom >= p) || (prev > p && currentZoom <= p);
+    if (crossed && navigator.vibrate) navigator.vibrate(6);
+  });
+  dialLastHapticZoom = currentZoom;
+  renderZoomDial();
+}
+
 function wireZoomDial() {
   const overlay = document.getElementById('zoomDialOverlay');
 
-  // Drag directly on the dial overlay (finger already on it after long-press)
   overlay.addEventListener('touchmove', e => {
     if (!dialActive || e.touches.length !== 1) return;
-    const dx = e.touches[0].clientX - dialTouchX;
-    const newLogZ = Math.log(Math.max(ZOOM_MIN, dialTouchZoom)) + dx / DIAL_PX_PER_LOG;
-    applyZoom(Math.exp(newLogZ));
-    renderZoomDial();
+    dialDragUpdate(e.touches[0].clientX);
   }, { passive: true });
 
   overlay.addEventListener('touchend', () => {
@@ -523,7 +548,7 @@ function wireZoomDial() {
     dialHideTimer = setTimeout(hideZoomDial, 1800);
   }, { passive: true });
 
-  // iPhone-style: press-hold on zoom button, then drag without lifting
+  // iPhone-style: press-hold then drag without lifting finger
   document.querySelectorAll('.zoom-btn').forEach(btn => {
     let lpTimer  = null;
     let pressX   = 0;
@@ -540,25 +565,14 @@ function wireZoomDial() {
       lpTimer = setTimeout(() => {
         showZoomDial(pressX);
         dragging = true;
-      }, 350);
+      }, 250);
     }, { passive: true });
 
     btn.addEventListener('touchmove', e => {
       const dx = e.touches[0].clientX - pressX;
       const dy = e.touches[0].clientY - pressY;
-
-      // Cancel long-press only if moved more than 12px (finger jitter tolerance)
-      if (!dragging && Math.hypot(dx, dy) > 12) {
-        clearTimeout(lpTimer);
-      }
-
-      // If dial is showing, continue drag from this same touch
-      if (dialActive) {
-        const totalDx = e.touches[0].clientX - dialTouchX;
-        const newLogZ = Math.log(Math.max(ZOOM_MIN, dialTouchZoom)) + totalDx / DIAL_PX_PER_LOG;
-        applyZoom(Math.exp(newLogZ));
-        renderZoomDial();
-      }
+      if (!dragging && Math.hypot(dx, dy) > 12) clearTimeout(lpTimer);
+      if (dialActive) dialDragUpdate(e.touches[0].clientX);
     }, { passive: true });
 
     btn.addEventListener('touchend', () => {
@@ -656,9 +670,10 @@ function wireUI() {
 
   // Zoom preset buttons
   [
-    { id: 'zoomBtn1', z: 1 },
-    { id: 'zoomBtn2', z: 2 },
-    { id: 'zoomBtn3', z: 3 },
+    { id: 'zoomBtn05', z: 0.5 },
+    { id: 'zoomBtn1',  z: 1   },
+    { id: 'zoomBtn2',  z: 2   },
+    { id: 'zoomBtn3',  z: 3   },
   ].forEach(({ id, z }) => {
     document.getElementById(id).addEventListener('click', () => applyZoom(z));
   });

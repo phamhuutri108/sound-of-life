@@ -19,6 +19,7 @@ export async function startCamera(facing = 'environment') {
     });
     currentStream = stream;
     video.srcObject = stream;
+    video.style.transform = facing === 'user' ? 'scaleX(-1)' : '';
     await video.play();
     document.getElementById('cameraError').classList.remove('active');
   } catch (err) {
