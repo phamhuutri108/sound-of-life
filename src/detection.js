@@ -21,6 +21,68 @@ colCanvas.width = 11;
 colCanvas.height = 240;
 const colCtx = colCanvas.getContext('2d', { willReadFrequently: true });
 
+// Pre-allocated reusable buffers — avoid Float32Array GC churn on every detection call
+const _rowBBuf = new Float32Array(240); // raw per-row brightness
+const _smBBuf  = new Float32Array(240); // smoothed brightness
+
+// ── Live strip cache ────────────────────────────────────────────────────────
+// captureLiveStrip() is called from the rVFC callback (decoupled from rAF),
+// so the GPU→CPU readback happens outside the animation loop critical path.
+const _liveSmB    = new Float32Array(240);
+let   _liveBgBright = -1;
+let   _liveSerial   = 0; // bumped each capture; read by detection to check freshness
+let   _lastLiveSerial = -1;
+
+/**
+ * Capture a vertical pixel strip from the live camera into _liveSmB.
+ * Call this from the rVFC callback (NOT from the animation loop) so the
+ * drawImage + getImageData GPU sync stall is decoupled from rAF/audio scheduling.
+ */
+export function captureLiveStrip(source, scanX, staffData) {
+  if (!source || source.readyState < 2 || !staffData) return;
+  const dispW = staffData.displayWidth || 320;
+  const dispH = staffData.displayHeight || 240;
+  const H = PHOTO_SCAN_H;
+  const srcW = source.videoWidth || dispW;
+  const srcH = source.videoHeight || dispH;
+  if (!srcW || !srcH) return;
+
+  const fraction  = Math.max(0, Math.min(1, scanX / dispW));
+  const srcCX     = fraction * srcW;
+  const srcHalf   = Math.max(1, Math.round(5 * srcW / dispW));
+  const srcX0     = Math.max(0, Math.round(srcCX - srcHalf));
+  const srcStripW = Math.min(srcHalf * 2 + 1, srcW - srcX0);
+  if (srcStripW <= 0) return;
+
+  if (colCanvas.height !== H) colCanvas.height = H;
+  colCtx.drawImage(source, srcX0, 0, srcStripW, srcH, 0, 0, 11, H);
+  const imgData = colCtx.getImageData(0, 0, 11, H);
+  const px = imgData.data;
+
+  // Convert to per-row brightness using pre-allocated buffer
+  for (let y = 0; y < H; y++) {
+    let s = 0;
+    for (let x = 0; x < 11; x++) {
+      const i = (y * 11 + x) * 4;
+      s += 0.299 * px[i] + 0.587 * px[i + 1] + 0.114 * px[i + 2];
+    }
+    _rowBBuf[y] = s / 11;
+  }
+  // Smooth ±1 row (live camera has natural blur — ±2 unnecessary)
+  for (let y = 0; y < H; y++) {
+    const y0 = y > 0 ? y - 1 : y;
+    const y1 = y < H - 1 ? y + 1 : y;
+    _liveSmB[y] = (_rowBBuf[y0] + _rowBBuf[y] + _rowBBuf[y1]) / 3;
+  }
+
+  // Pre-compute background brightness so detection path is instant
+  let sum = 0, sumSq = 0;
+  for (let i = 0; i < H; i++) { const v = _liveSmB[i]; sum += v; sumSq += v * v; }
+  const mean = sum / H;
+  _liveBgBright = Math.max(mean, mean + 0.84 * Math.sqrt(Math.max(0, sumSq / H - mean * mean)));
+  _liveSerial++;
+}
+
 // ─── Photo pre-scan cache ─────────────────────────────────────────────────────
 // For static photos: getImageData runs ONCE on photo load, not every 280 ms.
 // Per-column lookup is then just a Float32Array slice — nearly instant.
@@ -99,10 +161,14 @@ function detectDarkObjectsAtScanLine(source, staffData, scanX, sensitivity) {
   const dispH = staffData.displayHeight || 240;
   const H = PHOTO_SCAN_H; // 240
   const scaleY = H / dispH;
-  const smB = new Float32Array(H);
+
+  // smB points to whichever brightness buffer is populated below — no allocation
+  let smB;
+  let bgBright;
 
   // ── Photo cache path: instant Float32Array read, no drawImage/getImageData ──
   if (_photoCache && _photoCacheW > 0 && !(source instanceof HTMLVideoElement)) {
+    smB = _smBBuf;
     const W = _photoCacheW;
     const fraction = Math.max(0, Math.min(1, scanX / (_photoCacheDispW || dispW)));
     const cx = Math.round(fraction * (W - 1));
@@ -113,8 +179,17 @@ function detectDarkObjectsAtScanLine(source, staffData, scanX, sensitivity) {
       for (let x = x0; x <= x1; x++) s += _photoCache[y * W + x];
       smB[y] = s / cols;
     }
+    bgBright = _photoBgBright;
+
+  // ── Live strip cache path: pre-captured in rVFC callback, no GPU stall here ──
+  } else if (_liveSerial !== _lastLiveSerial && source instanceof HTMLVideoElement) {
+    _lastLiveSerial = _liveSerial;
+    smB = _liveSmB;
+    bgBright = _liveBgBright;
+
   } else {
-    // ── Live video path: read 11 × 240 strip from current frame ────────────
+    // ── Fallback live path: direct drawImage + getImageData ─────────────────
+    // Used when captureLiveStrip() hasn't run yet (e.g. first frame, rVFC unsupported).
     const srcW = source.videoWidth || source.naturalWidth || source.width || dispW;
     const srcH = source.videoHeight || source.naturalHeight || source.height || dispH;
     if (!srcW || !srcH) return null;
@@ -131,33 +206,25 @@ function detectDarkObjectsAtScanLine(source, staffData, scanX, sensitivity) {
     const imgData = colCtx.getImageData(0, 0, 11, H);
     const px = imgData.data;
 
-    const rowB = new Float32Array(H);
+    smB = _smBBuf;
     for (let y = 0; y < H; y++) {
       let s = 0;
       for (let x = 0; x < 11; x++) {
         const i = (y * 11 + x) * 4;
         s += 0.299 * px[i] + 0.587 * px[i + 1] + 0.114 * px[i + 2];
       }
-      rowB[y] = s / 11;
+      _rowBBuf[y] = s / 11;
     }
     // Smooth ±2 rows to suppress single-pixel JPEG grain
     for (let y = 0; y < H; y++) {
       let s = 0, c = 0;
       for (let dy = -2; dy <= 2; dy++) {
         const yy = y + dy;
-        if (yy >= 0 && yy < H) { s += rowB[yy]; c++; }
+        if (yy >= 0 && yy < H) { s += _rowBBuf[yy]; c++; }
       }
       smB[y] = s / c;
     }
-  }
 
-  // ── Background brightness ─────────────────────────────────────────────────
-  // Photo: use pre-computed global value (stable — same result every scan pass)
-  // Live:  compute per-column (no cache available)
-  let bgBright;
-  if (_photoCache && _photoBgBright >= 0 && !(source instanceof HTMLVideoElement)) {
-    bgBright = _photoBgBright;
-  } else {
     let sum = 0, sumSq = 0;
     for (let i = 0; i < H; i++) { const v = smB[i]; sum += v; sumSq += v * v; }
     const mean = sum / H;

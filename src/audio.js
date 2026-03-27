@@ -3,6 +3,22 @@ import * as Tone from 'tone';
 export let audioReady = false;
 export const instruments = { ambient: null, piano: null, marimba: null, kalimba: null, flute: null, pluck: null, harpsichord: null, vibraphone: null, theremin: null, pad: null };
 
+// Mobile detection — used to reduce DSP load (reverb wet/roomSize) and lower lookAhead
+const isMobile = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent || '');
+
+// On mobile, reduce reverb wetness and room size to cut CPU load significantly.
+// On very low-end mobile (< 4 cores) skip reverb entirely.
+const mobileReverbScale = (navigator.hardwareConcurrency || 4) < 4 ? 0 : 0.45;
+function _rv(roomSize, wet, dampening) {
+  const r = new Tone.Freeverb({
+    roomSize: isMobile ? Math.min(roomSize * 0.55, 0.35) : roomSize,
+    dampening: isMobile ? Math.min(dampening * 1.4, 7000) : dampening,
+  });
+  r.wet.value = isMobile ? wet * mobileReverbScale : wet;
+  return r;
+}
+function _poly(mobile, desktop) { return isMobile ? mobile : desktop; }
+
 // How long each note gate stays open — affects sustained instruments most
 const INSTRUMENT_NOTE_DURATIONS = {
   theremin: '4n',  // long sustain notes slide into each other
@@ -37,9 +53,8 @@ function createAmbientSynth() {
     envelope: { attack: 0.2, decay: 0.3, sustain: 0.5, release: 2.0 },
     volume: -12,
   });
-  synth.maxPolyphony = 4;
-  const reverb = new Tone.Freeverb({ roomSize: 0.75, dampening: 4000 });
-  reverb.wet.value = 0.45;
+  synth.maxPolyphony = _poly(2, 4);
+  const reverb = _rv(0.75, 0.45, 4000);
   synth.chain(reverb, masterBus);
   return synth;
 }
@@ -50,9 +65,8 @@ function createPianoSynth() {
     envelope: { attack: 0.01, decay: 0.5, sustain: 0.15, release: 0.8 },
     volume: -8,
   });
-  synth.maxPolyphony = 4;
-  const reverb = new Tone.Freeverb({ roomSize: 0.4, dampening: 3500 });
-  reverb.wet.value = 0.2;
+  synth.maxPolyphony = _poly(2, 4);
+  const reverb = _rv(0.4, 0.2, 3500);
   synth.chain(reverb, masterBus);
   return synth;
 }
@@ -63,9 +77,8 @@ function createMarimbaSynth() {
     envelope: { attack: 0.001, decay: 0.35, sustain: 0.0, release: 0.4 },
     volume: -6,
   });
-  synth.maxPolyphony = 4;
-  const reverb = new Tone.Freeverb({ roomSize: 0.35, dampening: 5000 });
-  reverb.wet.value = 0.15;
+  synth.maxPolyphony = _poly(2, 4);
+  const reverb = _rv(0.35, 0.15, 5000);
   synth.chain(reverb, masterBus);
   return synth;
 }
@@ -76,9 +89,8 @@ function createKalimbaSynth() {
     envelope: { attack: 0.005, decay: 0.5, sustain: 0.05, release: 1.2 },
     volume: -8,
   });
-  synth.maxPolyphony = 4;
-  const reverb = new Tone.Freeverb({ roomSize: 0.55, dampening: 2500 });
-  reverb.wet.value = 0.3;
+  synth.maxPolyphony = _poly(2, 4);
+  const reverb = _rv(0.55, 0.3, 2500);
   synth.chain(reverb, masterBus);
   return synth;
 }
@@ -90,11 +102,15 @@ function createFluteSynth() {
     envelope: { attack: 0.12, decay: 0.1, sustain: 0.75, release: 1.2 },
     volume: -9,
   });
-  synth.maxPolyphony = 3;
-  const vibrato = new Tone.Vibrato({ frequency: 5.5, depth: 0.09, type: 'sine' });
-  const reverb = new Tone.Freeverb({ roomSize: 0.72, dampening: 1800 });
-  reverb.wet.value = 0.42;
-  synth.chain(vibrato, reverb, masterBus);
+  synth.maxPolyphony = _poly(2, 3);
+  const reverb = _rv(0.72, 0.42, 1800);
+  // Skip Vibrato on mobile — adds DSP overhead with minimal audible benefit at low polyphony
+  if (isMobile) {
+    synth.chain(reverb, masterBus);
+  } else {
+    const vibrato = new Tone.Vibrato({ frequency: 5.5, depth: 0.09, type: 'sine' });
+    synth.chain(vibrato, reverb, masterBus);
+  }
   return synth;
 }
 
@@ -105,9 +121,8 @@ function createPluckSynth() {
     envelope: { attack: 0.001, decay: 0.18, sustain: 0.0, release: 0.2 },
     volume: -8,
   });
-  synth.maxPolyphony = 4;
-  const reverb = new Tone.Freeverb({ roomSize: 0.15, dampening: 8000 });
-  reverb.wet.value = 0.08;
+  synth.maxPolyphony = _poly(2, 4);
+  const reverb = _rv(0.15, 0.08, 8000);
   synth.chain(reverb, masterBus);
   return synth;
 }
@@ -119,9 +134,8 @@ function createHarpsichordSynth() {
     envelope: { attack: 0.005, decay: 0.45, sustain: 0.0, release: 0.15 },
     volume: -10,
   });
-  synth.maxPolyphony = 4;
-  const reverb = new Tone.Freeverb({ roomSize: 0.2, dampening: 7000 });
-  reverb.wet.value = 0.1;
+  synth.maxPolyphony = _poly(2, 4);
+  const reverb = _rv(0.2, 0.1, 7000);
   synth.chain(reverb, masterBus);
   return synth;
 }
@@ -137,9 +151,8 @@ function createVibraphoneSynth() {
     modulationEnvelope: { attack: 0.002, decay: 0.25, sustain: 0.0, release: 0.25 },
     volume: -8,
   });
-  synth.maxPolyphony = 4;
-  const reverb = new Tone.Freeverb({ roomSize: 0.65, dampening: 2000 });
-  reverb.wet.value = 0.4;
+  synth.maxPolyphony = _poly(2, 4);
+  const reverb = _rv(0.65, 0.4, 2000);
   synth.chain(reverb, masterBus);
   return synth;
 }
@@ -153,10 +166,14 @@ function createThereminSynth() {
     volume: -9,
   });
   synth.maxPolyphony = 2;
-  const vibrato = new Tone.Vibrato({ frequency: 5.5, depth: 0.08, type: 'sine' });
-  const reverb = new Tone.Freeverb({ roomSize: 0.5, dampening: 2200 });
-  reverb.wet.value = 0.3;
-  synth.chain(vibrato, reverb, masterBus);
+  const reverb = _rv(0.5, 0.3, 2200);
+  // Skip Vibrato on mobile
+  if (isMobile) {
+    synth.chain(reverb, masterBus);
+  } else {
+    const vibrato = new Tone.Vibrato({ frequency: 5.5, depth: 0.08, type: 'sine' });
+    synth.chain(vibrato, reverb, masterBus);
+  }
   return synth;
 }
 
@@ -167,31 +184,55 @@ function createPadSynth() {
     envelope: { attack: 0.4, decay: 0.6, sustain: 0.7, release: 3.5 },
     volume: -14,
   });
-  synth.maxPolyphony = 3;
-  const chorus = new Tone.Chorus({ frequency: 2.5, delayTime: 3.5, depth: 0.7, wet: 0.5 });
-  const reverb = new Tone.Freeverb({ roomSize: 0.9, dampening: 1500 });
-  reverb.wet.value = 0.65;
-  synth.chain(chorus, reverb, masterBus);
+  synth.maxPolyphony = _poly(2, 3);
+  const reverb = _rv(0.9, 0.65, 1500);
+  // Skip Chorus on mobile — it adds two delay lines and an LFO
+  if (isMobile) {
+    synth.chain(reverb, masterBus);
+  } else {
+    const chorus = new Tone.Chorus({ frequency: 2.5, delayTime: 3.5, depth: 0.7, wet: 0.5 });
+    synth.chain(chorus, reverb, masterBus);
+  }
   return synth;
+}
+
+const _instrumentFactories = {
+  ambient:     createAmbientSynth,
+  piano:       createPianoSynth,
+  marimba:     createMarimbaSynth,
+  kalimba:     createKalimbaSynth,
+  flute:       createFluteSynth,
+  pluck:       createPluckSynth,
+  harpsichord: createHarpsichordSynth,
+  vibraphone:  createVibraphoneSynth,
+  theremin:    createThereminSynth,
+  pad:         createPadSynth,
+};
+
+// Ensure the instrument for `name` exists; create it lazily if not.
+function ensureInstrument(name) {
+  if (!instruments[name] && _instrumentFactories[name]) {
+    instruments[name] = _instrumentFactories[name]();
+  }
 }
 
 export function setupInstruments() {
   masterBus = createMasterBus();
-  instruments.ambient     = createAmbientSynth();
-  instruments.piano       = createPianoSynth();
-  instruments.marimba     = createMarimbaSynth();
-  instruments.kalimba     = createKalimbaSynth();
-  instruments.flute       = createFluteSynth();
-  instruments.pluck       = createPluckSynth();
-  instruments.harpsichord = createHarpsichordSynth();
-  instruments.vibraphone  = createVibraphoneSynth();
-  instruments.theremin    = createThereminSynth();
-  instruments.pad         = createPadSynth();
+  // On mobile: only create the default instrument now — others are created on first use.
+  // On desktop: create all upfront for zero latency when switching.
+  if (isMobile) {
+    ensureInstrument(currentInstrument);
+  } else {
+    Object.keys(_instrumentFactories).forEach(n => ensureInstrument(n));
+  }
 }
 
 export function initAudio() {
   if (audioReady) return;
   Tone.start().then(() => {
+    // Reduce scheduling look-ahead on mobile: default 0.1 s adds 100 ms of extra latency.
+    // 0.05 s is still safe (2–3 audio buffer lengths) and halves perceived delay.
+    if (isMobile) Tone.getContext().lookAhead = 0.05;
     audioReady = true;
     setupInstruments();
   }).catch(err => console.warn('Audio init error:', err));
@@ -200,8 +241,9 @@ export function initAudio() {
 export function tryUnlockAudio() {
   if (!audioReady) {
     Tone.start().then(() => {
+      if (isMobile) Tone.getContext().lookAhead = 0.05;
       audioReady = true;
-      if (!instruments.ambient) setupInstruments();
+      if (!masterBus) setupInstruments();
     }).catch(() => {});
   }
 }
@@ -209,6 +251,8 @@ export function tryUnlockAudio() {
 export function switchInstrument(name) {
   if (instruments[currentInstrument]) instruments[currentInstrument].releaseAll();
   currentInstrument = name;
+  // Lazy-create the instrument if not yet built (mobile path)
+  if (masterBus) ensureInstrument(name);
 }
 
 export function setInstrument(name) {

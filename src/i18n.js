@@ -38,6 +38,12 @@ export const I18N = {
     'a2hs-android': 'Install the app for the best experience',
     'a2hs-android-manual': 'Tap the menu then "Add to Home Screen"',
     'a2hs-install': 'Install',
+    'a2hs-modal-desc': 'Works offline · No app store · Always ready',
+    'a2hs-ios-step1': 'Tap the Share button in Safari',
+    'a2hs-ios-step2': 'Select "Add to Home Screen"',
+    'a2hs-menu-step1': 'Tap ⋮ menu in your browser',
+    'a2hs-menu-step2': 'Select "Add to Home Screen"',
+    'a2hs-not-now': 'Not now',
   },
   vi: {
     'app-title': 'Âm Thanh Cuộc Sống',
@@ -78,6 +84,12 @@ export const I18N = {
     'a2hs-android': 'Cài ứng dụng để có trải nghiệm tốt nhất',
     'a2hs-android-manual': 'Nhấn menu trình duyệt rồi chọn "Thêm vào Màn hình chính"',
     'a2hs-install': 'Cài đặt',
+    'a2hs-modal-desc': 'Dùng offline · Không cần kho ứng dụng · Luôn sẵn sàng',
+    'a2hs-ios-step1': 'Nhấn nút Chia sẻ trong Safari',
+    'a2hs-ios-step2': 'Chọn "Thêm vào Màn hình chính"',
+    'a2hs-menu-step1': 'Nhấn menu ⋮ trong trình duyệt',
+    'a2hs-menu-step2': 'Chọn "Thêm vào Màn hình chính"',
+    'a2hs-not-now': 'Để sau',
   },
 };
 
