@@ -4,6 +4,7 @@ let segmenter = null;
 let loading = false;
 let lastInferenceTime = 0;
 let inferenceInFlight = false;
+let photoMaskCached = false; // true after first successful inference on a static photo
 
 const MEDIAPIPE_MODEL_URL =
   'https://storage.googleapis.com/mediapipe-models/image_segmenter/deeplab_v3/float32/1/deeplab_v3.tflite';
@@ -83,6 +84,18 @@ export function setSmartProfile(profile = 'balanced') {
 
 export function getSmartProfile() {
   return smartProfile;
+}
+
+/**
+ * Call when a new photo is loaded so MediaPipe re-infers once for the overlay.
+ * Also clears the cached mask so stale results from the previous photo are gone.
+ */
+export function resetPhotoMask() {
+  photoMaskCached = false;
+  cachedMask = null;
+  maskW = 0;
+  maskH = 0;
+  lastInferenceTime = 0; // allow inference to run immediately
 }
 
 function clamp(v, lo, hi) {
@@ -236,6 +249,9 @@ export async function loadSmartModel() {
 export function runInference(imageSource, opts = {}) {
   if (!segmenter || !imageSource || !opts.staffData) return;
 
+  // Static photo: mask doesn't change between frames — only compute once per photo
+  if (opts.appMode === 'photo' && photoMaskCached) return;
+
   const now = Date.now();
   if (inferenceInFlight || now - lastInferenceTime < inferenceInterval) return;
   lastInferenceTime = now;
@@ -277,15 +293,17 @@ export function runInference(imageSource, opts = {}) {
         segmenter.segmentForVideo(roiCanvas, now, (result) => {
           try {
             readForegroundMask(result);
+            if (opts.appMode === 'photo') photoMaskCached = true;
             if (typeof result?.close === 'function') result.close();
           } catch { /* ignore */ }
           inferenceInFlight = false;
         });
       } else {
-        // Photo: segment() is synchronous but only called once per capture, acceptable
+        // Photo: segment() is synchronous — runs once then photoMaskCached freezes it
         const result = segmenter.segment(roiCanvas);
         readForegroundMask(result);
         if (typeof result?.close === 'function') result.close();
+        photoMaskCached = true;
         inferenceInFlight = false;
       }
     } catch {

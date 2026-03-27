@@ -1,6 +1,6 @@
 // Detection: MediaPipe Segmentation (smart) with brightness+Canny fallback
 
-import { isSmartReady, isSmartLoading, runInference, getEdgeTransitions } from './smartDetection.js';
+import { isSmartReady, runInference } from './smartDetection.js';
 
 export let cvReady = false;
 let _opencvLoadStarted = false;
@@ -83,83 +83,98 @@ function captureToDetectionCanvas({ appMode, photoImgEl, staffData }) {
   };
 }
 
-/* ── Fallback: brightness contrast ── */
+/* ── Column-scan dark-object detector ── */
 
-function computeAdaptiveThreshold(imageData) {
-  const px = imageData.data;
-  let mn = 255, mx = 0;
-  for (let i = 0; i < px.length; i += 16) {
-    const g = 0.299 * px[i] + 0.587 * px[i + 1] + 0.114 * px[i + 2];
-    if (g < mn) mn = g;
-    if (g > mx) mx = g;
-  }
-  return Math.max(20, Math.min(80, (mx - mn) * 0.3));
-}
+// Single narrow canvas for reading one thin column at a time (11 × 240 px)
+const colCanvas = document.createElement('canvas');
+colCanvas.width = 11;
+colCanvas.height = 240;
+const colCtx = colCanvas.getContext('2d', { willReadFrequently: true });
 
-function detectBrightnessAtPositions(frameData, notePositions, scanXScaled, sensitivity) {
-  const { imageData, width, height } = frameData;
-  const px = imageData.data;
-  const base = computeAdaptiveThreshold(imageData);
-  const threshold = base * (1.5 - sensitivity / 100);
+/**
+ * Detect dark objects (birds, leaves, silhouettes) by sampling a thin pixel
+ * column at scanX and comparing local brightness to the column background.
+ *
+ * Uses local AVERAGE (not min) so thin power wires (1 px) don't trigger —
+ * only blobs with real visual mass (birds ≥ 3 px, leaves, etc.) register.
+ *
+ * Returns [{detected, confidence, y, noteIndex}] for every note position.
+ */
+function detectDarkObjectsAtScanLine(source, staffData, scanX, sensitivity) {
+  const dispW = staffData.displayWidth || 320;
+  const dispH = staffData.displayHeight || 240;
+  const H = 240;
+  const scaleY = H / dispH;
+  if (colCanvas.height !== H) colCanvas.height = H;
 
-  let globalSum = 0, globalCount = 0;
-  for (let i = 0; i < px.length; i += 16) {
-    globalSum += 0.299 * px[i] + 0.587 * px[i + 1] + 0.114 * px[i + 2];
-    globalCount++;
-  }
-  const globalAvg = globalSum / globalCount;
+  const srcW = source.videoWidth || source.naturalWidth || source.width || dispW;
+  const srcH = source.videoHeight || source.naturalHeight || source.height || dispH;
+  if (!srcW || !srcH) return null;
 
-  const sampleW = 12, sampleH = 8;
-  return notePositions.map(pos => {
-    const cx = Math.round(scanXScaled);
-    const cy = Math.round(pos.yScaled);
-    let localSum = 0, localCount = 0;
-    for (let dy = -sampleH; dy <= sampleH; dy++) {
-      for (let dx = -sampleW; dx <= sampleW; dx++) {
-        const px2 = cx + dx, py2 = cy + dy;
-        if (px2 >= 0 && px2 < width && py2 >= 0 && py2 < height) {
-          const idx = (py2 * width + px2) * 4;
-          localSum += 0.299 * px[idx] + 0.587 * px[idx + 1] + 0.114 * px[idx + 2];
-          localCount++;
-        }
-      }
+  // Map scanX (display coords) → a thin strip in source coordinates
+  const fraction = Math.max(0, Math.min(1, scanX / dispW));
+  const srcCX = fraction * srcW;
+  const srcHalf = Math.max(1, Math.round(5 * srcW / dispW));
+  const srcX0 = Math.max(0, Math.round(srcCX - srcHalf));
+  const srcStripW = Math.min(srcHalf * 2 + 1, srcW - srcX0);
+  if (srcStripW <= 0) return null;
+
+  // Single drawImage of a thin strip → stretched to fill 11 × H (fast GPU op)
+  colCtx.drawImage(source, srcX0, 0, srcStripW, srcH, 0, 0, 11, H);
+  const imgData = colCtx.getImageData(0, 0, 11, H);
+  const px = imgData.data;
+
+  // Per-row grayscale brightness
+  const rowB = new Float32Array(H);
+  for (let y = 0; y < H; y++) {
+    let s = 0;
+    for (let x = 0; x < 11; x++) {
+      const i = (y * 11 + x) * 4;
+      s += 0.299 * px[i] + 0.587 * px[i + 1] + 0.114 * px[i + 2];
     }
-    const localAvg = localCount > 0 ? localSum / localCount : globalAvg;
-    return Math.abs(localAvg - globalAvg) > threshold;
-  });
-}
-
-/* ── Fallback: OpenCV Canny edges ── */
-
-function detectEdgesAtPositions(detCanvas, notePositions, scanXScaled) {
-  if (!cvReady) return null;
-  try {
-    const src = cv.imread(detCanvas);
-    const gray = new cv.Mat(), blurred = new cv.Mat(), edges = new cv.Mat();
-    cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY);
-    cv.GaussianBlur(gray, blurred, new cv.Size(5, 5), 1.5);
-    cv.Canny(blurred, edges, 50, 150);
-    const sw = 12, sh = 8;
-    const results = notePositions.map(pos => {
-      const cx = Math.round(scanXScaled);
-      const cy = Math.round(pos.yScaled);
-      let edgeCount = 0, total = 0;
-      for (let dy = -sh; dy <= sh; dy++) {
-        for (let dx = -sw; dx <= sw; dx++) {
-          const py = cy + dy, px = cx + dx;
-          if (py >= 0 && py < edges.rows && px >= 0 && px < edges.cols) {
-            total++;
-            if (edges.ucharAt(py, px) > 0) edgeCount++;
-          }
-        }
-      }
-      return total > 0 && edgeCount / total > 0.05;
-    });
-    src.delete(); gray.delete(); blurred.delete(); edges.delete();
-    return results;
-  } catch (e) {
-    return null;
+    rowB[y] = s / 11;
   }
+
+  // Smooth ±2 rows to suppress single-pixel grain / JPEG artefacts
+  const smB = new Float32Array(H);
+  for (let y = 0; y < H; y++) {
+    let s = 0, c = 0;
+    for (let dy = -2; dy <= 2; dy++) {
+      const yy = y + dy;
+      if (yy >= 0 && yy < H) { s += rowB[yy]; c++; }
+    }
+    smB[y] = s / c;
+  }
+
+  // Background brightness = mean of the brightest 20 % of rows
+  // (keeps estimate unbiased even when many dark objects are present)
+  const sortedB = Array.from(smB).sort((a, b) => b - a);
+  const bgBright = sortedB[Math.floor(H * 0.2)] || 128;
+
+  // Threshold: sens=70 (default) → ~0.13 (must be 13 % darker than background)
+  const threshFrac = 0.28 - (sensitivity / 100) * 0.20;
+
+  return staffData.positions.map((pos, i) => {
+    const cy = Math.round(pos.y * scaleY);
+    const r = 7; // ±7 canvas rows around each note Y position
+    let sumArea = 0, cnt = 0;
+    for (let dy = -r; dy <= r; dy++) {
+      const yy = cy + dy;
+      if (yy >= 0 && yy < H) { sumArea += smB[yy]; cnt++; }
+    }
+    const localAvg = cnt > 0 ? sumArea / cnt : bgBright;
+
+    // Dark score: how much darker is the local average vs background?
+    // A thin wire (1 px in a 15-row window) barely moves the average.
+    // A bird (≥3 px) or leaf pulls it down noticeably.
+    const darkScore = (bgBright - localAvg) / (bgBright + 1);
+    const detected = bgBright > 30 && darkScore > threshFrac;
+    const confidence = detected
+      ? Math.min(1, (darkScore - threshFrac) / Math.max(0.01, 0.4 - threshFrac))
+      : 0;
+
+    return { detected, confidence, y: pos.y, noteIndex: i };
+  });
 }
 
 /**
@@ -178,67 +193,20 @@ function yToNoteIndex(y, staffData) {
 
 /* ── Main export ── */
 export function detectObjects({ appMode, photoImgEl, staffData, scanX, sensitivity }) {
-    if (!staffData) return null;
-  
-    // ── Smart path: MediaPipe segmentation ──
-    if (isSmartReady()) {
-      const video = document.getElementById('cameraVideo');
-      const source = (appMode === 'photo' && photoImgEl) ? photoImgEl : video;
-      if (source) {
-          runInference(source, { appMode, staffData, sensitivity, scanX }); // fire-and-forget
-      }
-  
-      const transitions = getEdgeTransitions(staffData, scanX, sensitivity);
-      if (transitions) {
-        // Return new format: array of {y, confidence, noteIndex}
-        return transitions.map(t => ({
-          detected: true,
-          confidence: t.confidence,
-          y: t.y,
-          noteIndex: yToNoteIndex(t.y, staffData),
-        }));
-      }
-      // Fall through if mask is not ready yet
-    }
-  
-    // In live mode, MediaPipe is the only detection path. Skip the heavy
-    // OpenCV/brightness fallback entirely — it would block the main thread
-    // and the mask simply isn't available yet while the model loads.
-    if (appMode === 'live') return null;
+  if (!staffData) return null;
 
-    // While MediaPipe is still loading, avoid triggering expensive CV work.
-    if (isSmartLoading()) return null;
+  const video = document.getElementById('cameraVideo');
+  const source = (appMode === 'photo' && photoImgEl) ? photoImgEl : video;
+  if (!source) return null;
+  if (source instanceof HTMLVideoElement && source.readyState < 2) return null;
 
-    // ── Fallback: brightness + Canny (photo mode only) ──
-    const cap = captureToDetectionCanvas({ appMode, photoImgEl, staffData });
-    if (!cap) return null;
-  
-    const { canvas: detCanvas, scaleX, scaleY } = cap;
-    const imageData = detectionCtx.getImageData(0, 0, detCanvas.width, detCanvas.height);
-    const frameData = { imageData, width: detCanvas.width, height: detCanvas.height };
-  
-    const scanXScaled = scanX * scaleX;
-    const notePositions = staffData.positions.map(pos => ({
-      ...pos,
-      yScaled: pos.y * scaleY,
-    }));
-  
-    const brightness = detectBrightnessAtPositions(frameData, notePositions, scanXScaled, sensitivity);
-    const edges = detectEdgesAtPositions(detCanvas, notePositions, scanXScaled);
-  
-    const fixedResults = notePositions.map((pos, i) => {
-      const byB = brightness[i];
-      const byE = edges ? edges[i] : false;
-      return {
-        detected: byB || byE,
-        confidence: (byB ? 0.5 : 0) + (byE ? 0.5 : 0),
-      };
-    });
-
-    // Wrap fallback results to be compatible with new format
-    return fixedResults.map((r, i) => ({
-      ...r,
-      y: staffData.positions[i].y,
-      noteIndex: i,
-    }));
+  // Keep MediaPipe running in background for the visual overlay (async, non-blocking)
+  if (isSmartReady()) {
+    runInference(source, { appMode, staffData, sensitivity, scanX });
   }
+
+  // Primary note detection: column-scan brightness analysis.
+  // Reads only 11 × 240 pixels — fast enough to run every detection frame.
+  // Detects any dark object against a lighter background: birds, leaves, etc.
+  return detectDarkObjectsAtScanLine(source, staffData, scanX, sensitivity);
+}

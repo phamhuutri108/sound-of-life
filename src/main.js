@@ -32,6 +32,7 @@ import {
   drawDetections,
   getSmartBackend,
   setSmartProfile,
+  resetPhotoMask,
 } from './smartDetection.js';
 
 /* ═══════════════════════════════════════════════════════════════
@@ -203,6 +204,7 @@ function capturePhoto() {
   if (result) {
     photoDataURL = result.photoDataURL;
     photoImgEl = result.photoImgEl;
+    resetPhotoMask(); // new photo — clear stale mask, trigger fresh MediaPipe pass
     // Show save button
     document.getElementById('saveBtn').style.display = '';
     // Wait for image to decode before computing bounds (may already be complete for data URLs)
@@ -270,6 +272,7 @@ function doRetakePhoto() {
   retakePhoto();
   photoDataURL = null;
   photoImgEl = null;
+  resetPhotoMask(); // returning to camera — clear cached mask
   document.getElementById('saveBtn').style.display = 'none';
   // Restore full-canvas staff (no letterbox)
   staffData = resizeCanvas();
@@ -284,6 +287,7 @@ function onImportPhoto() {
     onResult: (result) => {
       photoDataURL = result.photoDataURL;
       photoImgEl = result.photoImgEl;
+      resetPhotoMask(); // new photo — clear stale mask, trigger fresh MediaPipe pass
       document.getElementById('saveBtn').style.display = '';
       if (photoImgEl.complete && photoImgEl.naturalWidth) {
         applyPhotoBounds();
