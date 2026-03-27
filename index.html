@@ -6,8 +6,25 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="theme-color" content="#0a1208">
-  <meta name="description" content="Sound of Life — point your camera at the world and let it sing. Objects become notes, moments become music.">
+  <meta name="description" content="Bống Bống Bông Bông, lên ăn cơm vàng, cơm bạc nhà ta.">
   <title>Sound of Life</title>
+
+  <!-- Open Graph / Facebook / Zalo / iMessage -->
+  <meta property="og:type"         content="website">
+  <meta property="og:url"          content="https://sound-of-life.phamhuutri.com/">
+  <meta property="og:site_name"    content="Sound of Life">
+  <meta property="og:title"        content="Sound of Life">
+  <meta property="og:description"  content="Bống Bống Bông Bông, lên ăn cơm vàng, cơm bạc nhà ta.">
+  <meta property="og:image"        content="https://sound-of-life.phamhuutri.com/meta-cover.png">
+  <meta property="og:image:width"  content="1200">
+  <meta property="og:image:height" content="630">
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card"        content="summary_large_image">
+  <meta name="twitter:title"       content="Sound of Life">
+  <meta name="twitter:description" content="Bống Bống Bông Bông, lên ăn cơm vàng, cơm bạc nhà ta.">
+  <meta name="twitter:image"       content="https://sound-of-life.phamhuutri.com/meta-cover.png">
+
   <link rel="icon" type="image/png" href="/favicon.png">
   <link rel="apple-touch-icon" href="/favicon.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -46,7 +63,7 @@
     <div class="splash-mist" aria-hidden="true"></div>
 
     <div class="splash-title" id="txt-app-title">Sound of Life</div>
-    <div class="splash-subtitle" id="txt-tagline">Bống Bống Bông Bông, lên ăn cơm vàng, cơm bạc nhà ta</div>
+    <div class="splash-subtitle" id="txt-tagline">Bống Bống Bông Bông, lên ăn cơm vàng, cơm bạc nhà ta.</div>
 
     <!-- Mode cards — directly on splash -->
     <div class="splash-modes">
@@ -123,6 +140,14 @@
       <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
         <path d="M14 4a7 7 0 1 0 1.8 4.5"/>
         <polyline points="16,1 16,5.5 11.5,5.5"/>
+      </svg>
+    </button>
+    <!-- Save photo (visible only when a photo is captured) -->
+    <button class="top-btn" id="saveBtn" title="Save photo" style="display:none">
+      <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M9 3v9"/>
+        <polyline points="5,8 9,12 13,8"/>
+        <path d="M3 15h12"/>
       </svg>
     </button>
     <div class="mode-badge" id="modeBadge">PHOTO</div>
@@ -285,7 +310,7 @@
       <div class="toggle-row">
         <span class="toggle-label" id="txt-show-clef">Treble clef (Khóa Sol)</span>
         <label class="toggle-switch">
-          <input type="checkbox" id="toggleClef" checked>
+          <input type="checkbox" id="toggleClef">
           <span class="toggle-track"><span class="toggle-knob"></span></span>
         </label>
       </div>

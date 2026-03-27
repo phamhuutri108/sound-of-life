@@ -14,10 +14,11 @@ import {
   cameraFacing as _cameraFacing, currentStream,
 } from './camera.js';
 import {
-  ctx,
+  ctx, canvas as staffCanvas,
   resizeCanvas,
   renderStaff,
   setShowClef, setShowGrid,
+  showClef, showGrid,
 } from './staff.js';
 import {
   cvReady,
@@ -35,6 +36,29 @@ let photoDataURL = null;
 let photoImgEl = null;
 let sensitivity = 70;
 let staffData = null;
+
+/**
+ * Compute the actual pixel bounds of a photo rendered with `background-size: contain`
+ * inside #cameraView. Returns { x, y, w, h } in CSS pixels, or null if unavailable.
+ */
+function computePhotoBounds(imgEl) {
+  if (!imgEl) return null;
+  const iw = imgEl.naturalWidth  || imgEl.width;
+  const ih = imgEl.naturalHeight || imgEl.height;
+  if (!iw || !ih) return null;
+  const rect = document.getElementById('cameraView').getBoundingClientRect();
+  const cw = rect.width, ch = rect.height;
+  const scale = Math.min(cw / iw, ch / ih);
+  const dw = iw * scale, dh = ih * scale;
+  return { x: (cw - dw) / 2, y: (ch - dh) / 2, w: dw, h: dh };
+}
+
+/** Recalculate staffData for the current photo, constraining staff to the photo area. */
+function applyPhotoBounds() {
+  const bounds = computePhotoBounds(photoImgEl);
+  staffData = resizeCanvas(bounds);
+  if (staffData) scanX = staffData.staffLeft;
+}
 
 /* ═══════════════════════════════════════════════════════════════
    SCAN LINE STATE
@@ -115,6 +139,7 @@ function goHome() {
   document.getElementById('topBar').style.display = 'none';
   document.getElementById('bottomToolbar').style.display = 'none';
   document.getElementById('zoomControls').style.display = 'none';
+  document.getElementById('saveBtn').style.display = 'none';
   document.getElementById('cameraView').classList.remove('active');
 
   // Show splash (home with mode cards)
@@ -129,7 +154,7 @@ async function selectMode(mode) {
   document.getElementById('topBar').style.display = '';
   document.getElementById('bottomToolbar').style.display = '';
   document.getElementById('zoomControls').style.display = '';
-  document.getElementById('zoomControls').style.opacity = '0';
+  document.getElementById('zoomControls').style.opacity = '1';
   applyMode(mode);
   await startCamera(_cameraFacing);
   initCameraZoom();
@@ -154,15 +179,70 @@ function capturePhoto() {
   if (result) {
     photoDataURL = result.photoDataURL;
     photoImgEl = result.photoImgEl;
-    // Reset scan to start
-    if (staffData) scanX = staffData.staffLeft;
+    // Show save button
+    document.getElementById('saveBtn').style.display = '';
+    // Wait for image to decode before computing bounds (may already be complete for data URLs)
+    if (photoImgEl.complete && photoImgEl.naturalWidth) {
+      applyPhotoBounds();
+    } else {
+      photoImgEl.onload = applyPhotoBounds;
+    }
   }
+}
+
+async function savePhoto() {
+  if (!photoDataURL) return;
+  const filename = `sound-of-life-${Date.now()}.jpg`;
+
+  // If any overlay is visible, composite photo + staff canvas at display resolution.
+  // Otherwise save pure photo at full camera resolution.
+  let dataURL = photoDataURL;
+
+  if ((showClef || showGrid) && staffData && photoImgEl) {
+    const W = staffData.displayWidth;
+    const H = staffData.displayHeight;
+    const tmp = document.createElement('canvas');
+    tmp.width  = W;
+    tmp.height = H;
+    const tc = tmp.getContext('2d');
+    // Draw photo with contain fit (matches CSS background-size:contain)
+    const iw = photoImgEl.naturalWidth  || photoImgEl.width;
+    const ih = photoImgEl.naturalHeight || photoImgEl.height;
+    const scale = Math.min(W / iw, H / ih);
+    const dw = iw * scale, dh = ih * scale;
+    tc.drawImage(photoImgEl, (W - dw) / 2, (H - dh) / 2, dw, dh);
+    // Overlay staff canvas
+    tc.drawImage(staffCanvas, 0, 0, W, H);
+    dataURL = tmp.toDataURL('image/jpeg', 0.92);
+  }
+
+  // iOS Safari: Web Share API with File
+  if (navigator.canShare) {
+    try {
+      const res  = await fetch(dataURL);
+      const blob = await res.blob();
+      const file = new File([blob], filename, { type: 'image/jpeg' });
+      if (navigator.canShare({ files: [file] })) {
+        await navigator.share({ files: [file], title: 'Sound of Life' });
+        return;
+      }
+    } catch (_) { /* fall through */ }
+  }
+  // Fallback: <a download>
+  const a = document.createElement('a');
+  a.href     = dataURL;
+  a.download = filename;
+  a.click();
 }
 
 function doRetakePhoto() {
   retakePhoto();
   photoDataURL = null;
   photoImgEl = null;
+  document.getElementById('saveBtn').style.display = 'none';
+  // Restore full-canvas staff (no letterbox)
+  staffData = resizeCanvas();
+  if (staffData) scanX = staffData.staffLeft;
 }
 
 function onImportPhoto() {
@@ -173,7 +253,12 @@ function onImportPhoto() {
     onResult: (result) => {
       photoDataURL = result.photoDataURL;
       photoImgEl = result.photoImgEl;
-      if (staffData) scanX = staffData.staffLeft;
+      document.getElementById('saveBtn').style.display = '';
+      if (photoImgEl.complete && photoImgEl.naturalWidth) {
+        applyPhotoBounds();
+      } else {
+        photoImgEl.onload = applyPhotoBounds;
+      }
     },
   });
 }
@@ -290,8 +375,6 @@ let zoomTrack  = null; // MediaStreamTrack with zoom capability
 let zoomHwMin  = 1;
 let zoomHwMax  = ZOOM_MAX_DEFAULT;
 
-// Auto-hide pill
-let zoomHideTimer = null;
 
 function initCameraZoom() {
   zoomTrack = null;
@@ -342,12 +425,7 @@ function _applyCSSZoom(z) {
 }
 
 function bumpZoomPillVisible() {
-  const pill = document.getElementById('zoomControls');
-  pill.style.opacity = '1';
-  clearTimeout(zoomHideTimer);
-  zoomHideTimer = setTimeout(() => {
-    pill.style.opacity = '0';
-  }, 3000);
+  // Pill is always visible — nothing to do
 }
 
 function updateZoomPill() {
@@ -377,7 +455,7 @@ let dialActive   = false;
 let dialTouchX   = 0;
 let dialTouchZoom = 1;
 let dialHideTimer = null;
-let dialLastHapticZoom = 1;
+
 const DIAL_PX_PER_LOG = 90; // px per natural-log unit — lower = more sensitive
 const DIAL_PRESETS_HAPTIC = [0.5, 1, 2, 3, 4, 5];
 
@@ -386,9 +464,11 @@ function showZoomDial(startX) {
   dialTouchX    = startX;
   dialTouchZoom = currentZoom;
   dialActive    = true;
+  // Hide pill while dial is open
+  document.getElementById('zoomControls').style.opacity = '0';
+  document.getElementById('zoomControls').style.pointerEvents = 'none';
   const el = document.getElementById('zoomDialOverlay');
   el.style.display = '';
-  // Wait one frame for layout so canvas.offsetWidth is correct
   requestAnimationFrame(() => {
     el.style.opacity = '1';
     renderZoomDial();
@@ -400,7 +480,12 @@ function hideZoomDial() {
   dialActive = false;
   const el = document.getElementById('zoomDialOverlay');
   el.style.opacity = '0';
-  dialHideTimer = setTimeout(() => { el.style.display = 'none'; }, 320);
+  dialHideTimer = setTimeout(() => {
+    el.style.display = 'none';
+    // Restore pill after dial fades out
+    document.getElementById('zoomControls').style.opacity = '1';
+    document.getElementById('zoomControls').style.pointerEvents = '';
+  }, 320);
 }
 
 function renderZoomDial() {
@@ -415,18 +500,18 @@ function renderZoomDial() {
   dc.scale(dpr, dpr);
   dc.clearRect(0, 0, W, H);
 
-  // Dark gradient background (like iPhone camera dial)
+  // Dark gradient background
   const bg = dc.createLinearGradient(0, 0, 0, H);
-  bg.addColorStop(0,   'rgba(0,0,0,0)');
-  bg.addColorStop(0.25,'rgba(0,0,0,0.72)');
-  bg.addColorStop(1,   'rgba(0,0,0,0.88)');
+  bg.addColorStop(0,    'rgba(0,0,0,0)');
+  bg.addColorStop(0.3,  'rgba(0,0,0,0.75)');
+  bg.addColorStop(1,    'rgba(0,0,0,0.90)');
   dc.fillStyle = bg;
   dc.fillRect(0, 0, W, H);
 
-  // Arc geometry — compact circle, center slightly below canvas
+  // Arc geometry — circle centered below canvas so only top arc is visible
   const cx = W / 2;
-  const cy = H + 20;
-  const R  = Math.min(W * 0.75, 280);
+  const R  = Math.min(W * 0.52, 205);
+  const cy = H + 22; // center below canvas; top of arc at cy-R ≈ 22px
 
   // Which presets are available given zoom range?
   const presets = [0.5, 1, 2, 3].filter(z => z >= ZOOM_MIN && z <= zoomMax + 0.5);
@@ -434,38 +519,44 @@ function renderZoomDial() {
   const logMin = Math.log(ZOOM_MIN);
   const logMax = Math.log(Math.max(zoomMax, presets[presets.length - 1]));
   const logCur = Math.log(Math.max(ZOOM_MIN, currentZoom));
-  const HALF_ARC = Math.PI * 0.72; // ±130° = 260° total arc
+  // Fixed angular window: maps ±1.2 log units around current zoom to ±HALF_ARC
+  // This keeps adjacent presets (0.5×↔1×↔2×) always near the visible edges
+  const LOG_WINDOW = 2.4;
+  const HALF_ARC   = Math.PI * 0.72;
 
   const logToAngle = (lz) =>
-    -Math.PI / 2 + ((lz - logCur) / (logMax - logMin)) * HALF_ARC * 2;
+    -Math.PI / 2 + ((lz - logCur) / LOG_WINDOW) * HALF_ARC * 2;
+
+  // Clip all arc drawing to canvas bounds so nodes near the edges clip cleanly
+  dc.save();
+  dc.beginPath();
+  dc.rect(0, 0, W, H);
+  dc.clip();
 
   // Arc track ring
   const aStart = logToAngle(logMin);
   const aEnd   = logToAngle(logMax);
   dc.beginPath();
   dc.arc(cx, cy, R, aStart, aEnd);
-  dc.strokeStyle = 'rgba(255,255,255,0.14)';
+  dc.strokeStyle = 'rgba(255,255,255,0.18)';
   dc.lineWidth = 1.5;
   dc.stroke();
 
-  // Fine tick marks between presets
+  // Fine tick marks
   const FINE_STEP = 0.1;
   for (let z = ZOOM_MIN; z <= zoomMax + 0.01; z = Math.round((z + FINE_STEP) * 10) / 10) {
     const lz    = Math.log(Math.max(0.01, z));
     const angle = logToAngle(lz);
     if (Math.abs(angle + Math.PI / 2) > HALF_ARC + 0.05) continue;
-
-    // Skip the zone right around each preset node (they'll draw their own lines)
     const nearPreset = presets.some(p => Math.abs(z - p) < 0.18);
     if (nearPreset) continue;
 
-    const isHalf = Math.abs((z * 2) % 1) < 0.01; // 0.5 steps
-    const len    = isHalf ? 12 : 6;
+    const isHalf = Math.abs((z * 2) % 1) < 0.01;
+    const len    = isHalf ? 11 : 5;
     const ox = cx + R * Math.cos(angle);
     const oy = cy + R * Math.sin(angle);
     const ix = cx + (R - len) * Math.cos(angle);
     const iy = cy + (R - len) * Math.sin(angle);
-
     dc.beginPath();
     dc.moveTo(ox, oy);
     dc.lineTo(ix, iy);
@@ -474,50 +565,60 @@ function renderZoomDial() {
     dc.stroke();
   }
 
-  // Preset nodes — circular buttons on the arc
-  const NODE_R = 18; // radius of the circle node
+  // Preset nodes on the arc
+  const NODE_R = 16;
   presets.forEach(z => {
     const lz    = Math.log(z);
     const angle = logToAngle(lz);
-    if (Math.abs(angle + Math.PI / 2) > HALF_ARC + 0.15) return;
-
     const nx = cx + R * Math.cos(angle);
     const ny = cy + R * Math.sin(angle);
+    // Skip if node center is well below canvas (not just clipped at edge)
+    if (ny > H + NODE_R) return;
     const isActive = Math.abs(z - currentZoom) < 0.08;
 
-    // Node circle
     dc.beginPath();
     dc.arc(nx, ny, NODE_R, 0, Math.PI * 2);
-    dc.fillStyle = isActive
-      ? 'rgba(255, 214, 0, 0.25)'
-      : 'rgba(255, 255, 255, 0.10)';
+    dc.fillStyle = isActive ? 'rgba(255,214,0,0.22)' : 'rgba(255,255,255,0.10)';
     dc.fill();
-    dc.strokeStyle = isActive
-      ? 'rgba(255, 214, 0, 0.85)'
-      : 'rgba(255, 255, 255, 0.40)';
+    dc.strokeStyle = isActive ? 'rgba(255,214,0,0.90)' : 'rgba(255,255,255,0.38)';
     dc.lineWidth = 1.5;
     dc.stroke();
 
-    // Zoom label inside node
-    dc.font = `${isActive ? '700' : '500'} 13px Montserrat, sans-serif`;
-    dc.fillStyle = isActive ? '#ffd600' : 'rgba(255,255,255,0.80)';
+    dc.font = `${isActive ? '700' : '500'} 12px Montserrat, sans-serif`;
+    dc.fillStyle = isActive ? '#ffd600' : 'rgba(255,255,255,0.78)';
     dc.textAlign = 'center';
     dc.textBaseline = 'middle';
     dc.fillText(z + '×', nx, ny);
   });
 
-  // Fixed ▼ pointer at top center (always points to current zoom)
+  // ▼ pointer at arc top-center
   const topX = cx;
   const topY = cy - R - 2;
   dc.beginPath();
-  dc.moveTo(topX,     topY + 14);
-  dc.lineTo(topX - 8, topY + 2);
-  dc.lineTo(topX + 8, topY + 2);
+  dc.moveTo(topX,     topY + 13);
+  dc.lineTo(topX - 7, topY + 2);
+  dc.lineTo(topX + 7, topY + 2);
   dc.closePath();
   dc.fillStyle = '#ffd600';
   dc.fill();
 
-  // Current zoom value label (large, above pointer)
+  dc.restore();
+
+  // Left + right edge fade so nodes clip smoothly (like iPhone)
+  const FADE = 44;
+  const fadeL = dc.createLinearGradient(0, 0, FADE, 0);
+  fadeL.addColorStop(0, 'rgba(0,0,0,0.90)');
+  fadeL.addColorStop(1, 'rgba(0,0,0,0)');
+  dc.fillStyle = fadeL;
+  dc.fillRect(0, 0, FADE, H);
+
+  const fadeR = dc.createLinearGradient(W - FADE, 0, W, 0);
+  fadeR.addColorStop(0, 'rgba(0,0,0,0)');
+  fadeR.addColorStop(1, 'rgba(0,0,0,0.90)');
+  dc.fillStyle = fadeR;
+  dc.fillRect(W - FADE, 0, FADE, H);
+
+  // Zoom value label
   document.getElementById('zoomDialValue').textContent = currentZoom.toFixed(1) + '×';
 }
 
@@ -532,7 +633,6 @@ function dialDragUpdate(clientX) {
     const crossed = (prev < p && currentZoom >= p) || (prev > p && currentZoom <= p);
     if (crossed && navigator.vibrate) navigator.vibrate(6);
   });
-  dialLastHapticZoom = currentZoom;
   renderZoomDial();
 }
 
@@ -613,6 +713,7 @@ function wireUI() {
   document.getElementById('backBtn').addEventListener('click', goHome);
   document.getElementById('flipBtn').addEventListener('click', flipCamera);
   document.getElementById('settingsBtn').addEventListener('click', openSettings);
+  document.getElementById('saveBtn').addEventListener('click', savePhoto);
 
   // Bottom toolbar
   document.getElementById('captureBtn').addEventListener('click', onCapture);
@@ -714,14 +815,22 @@ function wireUI() {
 
   // ResizeObserver + orientationchange for landscape/portrait
   const ro = new ResizeObserver(() => {
-    staffData = resizeCanvas();
+    if (photoImgEl) {
+      applyPhotoBounds();
+    } else {
+      staffData = resizeCanvas();
+    }
     if (staffData) scanX = Math.max(staffData.staffLeft, Math.min(scanX, staffData.staffRight));
   });
   ro.observe(document.getElementById('cameraView'));
 
   window.addEventListener('orientationchange', () => {
     setTimeout(() => {
-      staffData = resizeCanvas();
+      if (photoImgEl) {
+        applyPhotoBounds();
+      } else {
+        staffData = resizeCanvas();
+      }
     }, 200);
   });
 }

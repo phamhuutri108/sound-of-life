@@ -6,13 +6,13 @@ const ctx = canvas.getContext('2d');
 export { canvas, ctx };
 
 // Overlay visibility flags (toggled via settings)
-export let showClef = true;
+export let showClef = false;
 export let showGrid = true;
 
 export function setShowClef(v) { showClef = v; }
 export function setShowGrid(v) { showGrid = v; }
 
-export function resizeCanvas() {
+export function resizeCanvas(bounds) {
   const rect = document.getElementById('cameraView').getBoundingClientRect();
   const dpr = window.devicePixelRatio || 1;
   canvas.width  = rect.width  * dpr;
@@ -20,17 +20,22 @@ export function resizeCanvas() {
   canvas.style.width  = rect.width  + 'px';
   canvas.style.height = rect.height + 'px';
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  return calculateStaffPositions(canvas.width, canvas.height);
+  return calculateStaffPositions(canvas.width, canvas.height, bounds);
 }
 
-export function calculateStaffPositions(canvasW, canvasH) {
+export function calculateStaffPositions(canvasW, canvasH, bounds) {
   const dpr = window.devicePixelRatio || 1;
   const W = canvasW / dpr;
   const H = canvasH / dpr;
-  const marginTop    = H * 0.12;
-  const marginBottom = H * 0.12;
-  const staffTop     = marginTop;
-  const staffBottom  = H - marginBottom;
+  // When a photo is letterboxed, constrain staff to the photo's actual display area
+  const bx = bounds ? bounds.x : 0;
+  const by = bounds ? bounds.y : 0;
+  const bw = bounds ? bounds.w : W;
+  const bh = bounds ? bounds.h : H;
+  const marginTop    = bh * 0.12;
+  const marginBottom = bh * 0.12;
+  const staffTop     = by + marginTop;
+  const staffBottom  = by + bh - marginBottom;
   const staffHeight  = staffBottom - staffTop;
   const N = 13;
   const spacing = staffHeight / (N - 1);
@@ -46,8 +51,8 @@ export function calculateStaffPositions(canvasW, canvasH) {
   return {
     positions, spacing,
     staffTop, staffBottom,
-    staffLeft:  W * 0.12,
-    staffRight: W * 0.97,
+    staffLeft:  bx + bw * 0.12,
+    staffRight: bx + bw * 0.97,
     displayWidth: W,
     displayHeight: H,
   };

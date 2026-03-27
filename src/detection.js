@@ -30,20 +30,44 @@ const detectionCtx = detectionCanvas.getContext('2d', { willReadFrequently: true
 
 function captureToDetectionCanvas({ appMode, photoImgEl, staffData }) {
   const video = document.getElementById('cameraVideo');
+
+  if (appMode === 'photo' && photoImgEl) {
+    // Match display aspect ratio so contain-fit placement is identical in both spaces,
+    // making scaleX == scaleY and staff positions map correctly to photo pixels.
+    const dispW = staffData?.displayWidth  || 320;
+    const dispH = staffData?.displayHeight || 240;
+    const W = 320;
+    const H = Math.max(1, Math.round(W * dispH / dispW));
+    detectionCanvas.width  = W;
+    detectionCanvas.height = H;
+    // Draw photo in contain mode (same as CSS background-size:contain)
+    const iw = photoImgEl.naturalWidth  || photoImgEl.width;
+    const ih = photoImgEl.naturalHeight || photoImgEl.height;
+    const scale = iw && ih ? Math.min(W / iw, H / ih) : 1;
+    const dw = (iw || W) * scale, dh = (ih || H) * scale;
+    const ox = (W - dw) / 2,     oy = (H - dh) / 2;
+    detectionCtx.fillStyle = '#000';
+    detectionCtx.fillRect(0, 0, W, H);
+    detectionCtx.drawImage(photoImgEl, ox, oy, dw, dh);
+    return {
+      canvas: detectionCanvas,
+      scaleX: W / dispW,
+      scaleY: H / dispH,
+    };
+  }
+
+  // Live camera: simple 320×240 downscale
   const W = 320, H = 240;
   detectionCanvas.width = W;
   detectionCanvas.height = H;
-
-  if (appMode === 'photo' && photoImgEl) {
-    detectionCtx.drawImage(photoImgEl, 0, 0, W, H);
-  } else if (video.readyState >= 2) {
+  if (video.readyState >= 2) {
     detectionCtx.drawImage(video, 0, 0, W, H);
   } else {
     return null;
   }
   return {
     canvas: detectionCanvas,
-    scaleX: W / (staffData?.displayWidth || W),
+    scaleX: W / (staffData?.displayWidth  || W),
     scaleY: H / (staffData?.displayHeight || H),
   };
 }
