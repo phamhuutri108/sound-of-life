@@ -642,18 +642,52 @@ button, .toolbar-btn, .segment-btn, .top-btn {
    LANDSCAPE MOBILE
 ═══════════════════════════════════════ */
 @media (orientation: landscape) and (max-height: 500px) {
+
+  /* ── Splash: compact vertical centering ── */
+  .splash-title { font-size: clamp(18px, 5vh, 28px); }
+  .splash-subtitle { margin-top: 8px; font-size: 11px; }
+  .splash-start-btn { margin-top: 20px; padding: 10px 32px; }
+  .splash-lang { bottom: max(8px, env(safe-area-inset-bottom)); }
+
+  /* ── Mode select: compact ── */
+  .mode-select {
+    gap: 10px;
+    padding: 16px max(24px, env(safe-area-inset-right)) 16px max(24px, env(safe-area-inset-left));
+  }
+  .mode-select-title { margin-bottom: 8px; }
+  .mode-cards-row { max-width: 480px; }
+  .mode-card { padding: 18px 12px 14px; gap: 10px; }
+
+  /* ── Top bar: notch is on the side in landscape ── */
+  .top-bar {
+    padding-top: 8px;
+    padding-bottom: 8px;
+    padding-left: max(16px, env(safe-area-inset-left));
+    /* stop before right sidebar */
+    right: calc(64px + max(0px, env(safe-area-inset-right)));
+  }
+
+  /* ── Bottom toolbar → right sidebar ── */
   .bottom-toolbar {
-    bottom: auto; right: 0; top: 0; left: auto;
-    width: 72px; height: 100%;
+    bottom: 0; top: 0;
+    left: auto; right: 0;
+    width: calc(64px + max(0px, env(safe-area-inset-right)));
+    height: 100%;
     flex-direction: column;
-    padding: 16px 8px;
+    padding: 12px 0;
+    padding-top: max(12px, env(safe-area-inset-top));
+    padding-bottom: max(12px, env(safe-area-inset-bottom));
     padding-right: max(8px, env(safe-area-inset-right));
     border-top: none;
     border-left: 1px solid var(--border-subtle);
     justify-content: space-around;
   }
-  .capture-btn { width: 52px; height: 52px; }
-  .toolbar-btn { padding: 8px; min-width: auto; }
+
+  /* Hide text labels — no room in narrow sidebar */
+  .toolbar-btn > span:last-child { display: none; }
+
+  .capture-btn { width: 50px; height: 50px; }
+  .toolbar-btn { padding: 8px; min-width: auto; min-height: 36px; }
 }
 
 /* ═══════════════════════════════════════
@@ -669,41 +703,45 @@ button, .toolbar-btn, .segment-btn, .top-btn {
 ═══════════════════════════════════════ */
 .zoom-controls {
   position: fixed;
-  bottom: calc(80px + max(0px, env(safe-area-inset-bottom)));
+  /* 96px clears the ~76px button content + safe-area reliably on all iPhones */
+  bottom: calc(96px + max(0px, env(safe-area-inset-bottom)));
   left: 0; right: 0;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 10px;
-  z-index: 48;
+  z-index: 52; /* above toolbar (50) so touches reach buttons */
   pointer-events: none;
 }
 
-/* Preset buttons row */
+/* Single pill — matches iPhone camera zoom style */
 .zoom-presets {
   display: flex;
-  gap: 6px;
+  gap: 0;
   pointer-events: auto;
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border-radius: 100px;
+  padding: 3px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .zoom-btn {
   min-width: 48px;
-  height: 34px;
-  padding: 0 10px;
+  height: 32px;
+  padding: 0 12px;
   border-radius: 100px;
   border: none;
-  background: rgba(0, 0, 0, 0.45);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  color: rgba(255, 255, 255, 0.75);
+  background: transparent;
+  color: rgba(255, 255, 255, 0.8);
   font-family: var(--font-ui);
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 600;
-  letter-spacing: 0.02em;
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
   transition: background 0.18s, color 0.18s, transform 0.12s;
-  touch-action: none;
+  touch-action: manipulation; /* allow taps, prevent double-tap zoom */
 }
 
 .zoom-btn .zoom-x {
@@ -712,9 +750,8 @@ button, .toolbar-btn, .segment-btn, .top-btn {
 }
 
 .zoom-btn.active {
-  background: rgba(212, 165, 116, 0.25);
+  background: rgba(212, 165, 116, 0.28);
   color: var(--accent-gold);
-  border: 1px solid rgba(212, 165, 116, 0.5);
 }
 
 .zoom-btn:active {
@@ -778,16 +815,16 @@ button, .toolbar-btn, .segment-btn, .top-btn {
   white-space: nowrap;
 }
 
-/* Landscape: move zoom to left side */
+/* Landscape: zoom stays bottom-left, clear of right sidebar */
 @media (orientation: landscape) and (max-height: 500px) {
   .zoom-controls {
-    bottom: auto;
-    left: auto;
-    right: 80px;
-    top: 50%;
-    transform: translateY(-50%);
-    flex-direction: column-reverse;
+    bottom: 14px;
+    left: max(12px, env(safe-area-inset-left));
+    right: calc(80px + max(0px, env(safe-area-inset-right)));
+    top: auto;
+    flex-direction: column;
+    align-items: flex-start;
   }
-  .zoom-presets { flex-direction: column; }
-  .zoom-wheel-wrap { width: 36px; max-width: none; height: 200px; }
+  .zoom-presets { flex-direction: row; }
+  .zoom-wheel-wrap { width: min(260px, 60vw); max-width: none; }
 }

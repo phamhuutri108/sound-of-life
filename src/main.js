@@ -14,9 +14,7 @@ import {
   cameraFacing as _cameraFacing,
 } from './camera.js';
 import {
-  ctx,
   resizeCanvas,
-  drawStaffLines, drawTrebleClef, drawNoteIndicator,
   renderStaff,
   setShowClef, setShowGrid,
 } from './staff.js';
@@ -192,13 +190,9 @@ function animationLoop(now) {
   requestAnimationFrame(animationLoop);
 
   if (!staffData || !isPlaying) {
-    // Still render staff (without scan line movement)
+    // Still render staff (without scan line movement), respecting showClef/showGrid flags
     if (staffData) {
-      ctx.clearRect(0, 0, staffData.displayWidth, staffData.displayHeight);
-      drawStaffLines(staffData);
-      drawTrebleClef(staffData);
-      // draw passive dots at scan position
-      staffData.positions.forEach(pos => drawNoteIndicator(scanX, pos.y, false, 0));
+      renderStaff(scanX, null, staffData, false);
     }
     return;
   }
@@ -332,15 +326,14 @@ function wireZoomWheel() {
       applyZoom(z);
     });
 
-    // Long press → show wheel
+    // Long press → show wheel (passive so click still fires for short taps)
     btn.addEventListener('touchstart', e => {
-      e.preventDefault();
       wheelStartX    = e.touches[0].clientX;
       wheelStartZoom = currentZoom;
       longPressTimer = setTimeout(() => {
         showZoomWheel();
       }, 300);
-    }, { passive: false });
+    }, { passive: true });
 
     btn.addEventListener('touchend', () => {
       clearTimeout(longPressTimer);
