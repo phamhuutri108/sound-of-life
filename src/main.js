@@ -310,8 +310,8 @@ let lastDetectionResults = null;
 const isHighEndIPhone = /iPhone/i.test(navigator.userAgent || '')
   && (navigator.hardwareConcurrency || 4) >= 6
   && (window.devicePixelRatio || 1) >= 3;
-const BASE_DETECTION_INTERVAL = isHighEndIPhone ? 120 : 180;
-const MAX_NOTES_PER_PASS = isHighEndIPhone ? 3 : 2;
+const BASE_DETECTION_INTERVAL = isHighEndIPhone ? 150 : 220;
+const MAX_NOTES_PER_PASS = 2;
 
 function animationLoop(now) {
   requestAnimationFrame(animationLoop);
