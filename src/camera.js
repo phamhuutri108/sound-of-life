@@ -166,16 +166,25 @@ export function importPhoto({ staffData, noteCooldowns, t, onResult }) {
   const input = document.getElementById('photoImport');
   input.onchange = (e) => {
     const file = e.target.files[0];
+    // Reset input immediately so the same file can be re-selected later
+    input.value = '';
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      const photoDataURL = ev.target.result;
-      const preview = document.getElementById('photoPreview');
-      preview.style.backgroundImage = `url(${photoDataURL})`;
-      preview.classList.add('active');
 
-      const photoImgEl = new Image();
-      photoImgEl.src = photoDataURL;
+    // createObjectURL is instant — zero base64 encoding, no main-thread work
+    const blobUrl = URL.createObjectURL(file);
+
+    const photoImgEl = new Image();
+    photoImgEl.src = blobUrl;
+
+    // decode() is async and off the main thread — UI stays responsive while JPEG decodes
+    const decodeDone = typeof photoImgEl.decode === 'function'
+      ? photoImgEl.decode().catch(() => {})
+      : Promise.resolve();
+
+    decodeDone.then(() => {
+      const preview = document.getElementById('photoPreview');
+      preview.style.backgroundImage = `url(${blobUrl})`;
+      preview.classList.add('active');
 
       // Hide live video
       document.getElementById('cameraVideo').style.opacity = '0';
@@ -190,11 +199,8 @@ export function importPhoto({ staffData, noteCooldowns, t, onResult }) {
         Object.keys(noteCooldowns).forEach(k => delete noteCooldowns[k]);
       }
 
-      if (onResult) onResult({ photoDataURL, photoImgEl });
-    };
-    reader.readAsDataURL(file);
-    // Reset input so same file can be re-selected
-    input.value = '';
+      if (onResult) onResult({ photoDataURL: blobUrl, photoImgEl });
+    });
   };
   input.click();
 }

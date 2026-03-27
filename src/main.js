@@ -124,6 +124,7 @@ function applyMode(mode) {
   badge.textContent = t(isPhoto ? 'photo-mode' : 'live-mode');
   document.getElementById('captureBtn').style.display = isPhoto ? '' : 'none';
   document.getElementById('galleryBtn').style.display = isPhoto ? '' : 'none';
+  _revokeBlobPhoto();
   retakePhoto();
   photoDataURL = null;
   photoImgEl = null;
@@ -258,7 +259,14 @@ async function savePhoto() {
   a.click();
 }
 
+function _revokeBlobPhoto() {
+  if (photoDataURL && photoDataURL.startsWith('blob:')) {
+    URL.revokeObjectURL(photoDataURL);
+  }
+}
+
 function doRetakePhoto() {
+  _revokeBlobPhoto();
   retakePhoto();
   photoDataURL = null;
   photoImgEl = null;
