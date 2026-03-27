@@ -111,6 +111,7 @@ function selectMode(mode) {
   document.getElementById('cameraView').classList.add('active');
   document.getElementById('topBar').style.display = '';
   document.getElementById('bottomToolbar').style.display = '';
+  document.getElementById('zoomControls').style.display = '';
   applyMode(mode);
   startCamera(_cameraFacing);
   staffData = resizeCanvas();
@@ -258,24 +259,124 @@ function onStart() {
 }
 
 /* ═══════════════════════════════════════════════════════════════
-   PINCH-TO-ZOOM
+   ZOOM
 ═══════════════════════════════════════════════════════════════ */
+const ZOOM_MIN = 0.5;
+const ZOOM_MAX = 5;
+const ZOOM_PRESETS = [0.5, 1, 2];
 let currentZoom = 1;
+
+function applyZoom(z) {
+  currentZoom = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, z));
+  const video = document.getElementById('cameraVideo');
+  video.style.transform = `scale(${currentZoom})`;
+  document.getElementById('photoPreview').style.transform = `scale(${currentZoom})`;
+  canvas.style.transform = `scale(${currentZoom})`;
+  updateZoomButtons();
+}
+
+function updateZoomButtons() {
+  document.querySelectorAll('.zoom-btn').forEach(btn => btn.classList.remove('active'));
+  const presetIds = ['zoomBtn05', 'zoomBtn1', 'zoomBtn2'];
+  ZOOM_PRESETS.forEach((z, i) => {
+    if (Math.abs(currentZoom - z) < 0.05) {
+      document.getElementById(presetIds[i]).classList.add('active');
+    }
+  });
+}
+
+/* ── Long-press zoom wheel ── */
+const WHEEL_DRAG_SCALE = 0.015; // zoom change per pixel dragged
+let wheelActive = false;
+let wheelStartX = 0;
+let wheelStartZoom = 1;
+let longPressTimer = null;
+
+function showZoomWheel() {
+  const wrap = document.getElementById('zoomWheelWrap');
+  wrap.style.display = '';
+  wheelActive = true;
+  updateWheelKnob();
+  if (navigator.vibrate) navigator.vibrate(10);
+}
+
+function hideZoomWheel() {
+  document.getElementById('zoomWheelWrap').style.display = 'none';
+  wheelActive = false;
+}
+
+function updateWheelKnob() {
+  const track = document.getElementById('zoomWheelTrack');
+  const knob  = document.getElementById('zoomWheelKnob');
+  const fill  = document.getElementById('zoomWheelFill');
+  const label = document.getElementById('zoomWheelValue');
+  const W = track.clientWidth;
+  const ratio = (currentZoom - ZOOM_MIN) / (ZOOM_MAX - ZOOM_MIN);
+  const x = Math.round(ratio * W);
+  knob.style.left = x + 'px';
+  fill.style.width = x + 'px';
+  label.textContent = currentZoom.toFixed(1) + '×';
+}
+
+function wireZoomWheel() {
+  const presetDefs = [
+    { id: 'zoomBtn05', z: 0.5 },
+    { id: 'zoomBtn1',  z: 1   },
+    { id: 'zoomBtn2',  z: 2   },
+  ];
+
+  presetDefs.forEach(({ id, z }) => {
+    const btn = document.getElementById(id);
+
+    // Tap → set preset immediately
+    btn.addEventListener('click', () => {
+      applyZoom(z);
+    });
+
+    // Long press → show wheel
+    btn.addEventListener('touchstart', e => {
+      e.preventDefault();
+      wheelStartX    = e.touches[0].clientX;
+      wheelStartZoom = currentZoom;
+      longPressTimer = setTimeout(() => {
+        showZoomWheel();
+      }, 300);
+    }, { passive: false });
+
+    btn.addEventListener('touchend', () => {
+      clearTimeout(longPressTimer);
+    }, { passive: true });
+
+    btn.addEventListener('touchmove', () => {
+      clearTimeout(longPressTimer);
+    }, { passive: true });
+  });
+
+  // Drag on the track itself after wheel is shown
+  document.addEventListener('touchmove', e => {
+    if (!wheelActive) return;
+    const dx = e.touches[0].clientX - wheelStartX;
+    applyZoom(wheelStartZoom + dx * WHEEL_DRAG_SCALE);
+    updateWheelKnob();
+  }, { passive: true });
+
+  document.addEventListener('touchend', () => {
+    if (!wheelActive) return;
+    wheelStartZoom = currentZoom;
+    wheelStartX    = 0;
+    setTimeout(hideZoomWheel, 1200);
+  }, { passive: true });
+}
+
+/* ── Pinch-to-zoom ── */
 let pinchStartDist = 0;
 let pinchStartZoom = 1;
 
 function getPinchDist(e) {
-  const dx = e.touches[0].clientX - e.touches[1].clientX;
-  const dy = e.touches[0].clientY - e.touches[1].clientY;
-  return Math.hypot(dx, dy);
-}
-
-function applyZoom() {
-  const z = currentZoom;
-  const video = document.getElementById('cameraVideo');
-  video.style.transform = `scale(${z})`;
-  document.getElementById('photoPreview').style.transform = `scale(${z})`;
-  canvas.style.transform = `scale(${z})`;
+  return Math.hypot(
+    e.touches[0].clientX - e.touches[1].clientX,
+    e.touches[0].clientY - e.touches[1].clientY,
+  );
 }
 
 /* ═══════════════════════════════════════════════════════════════
@@ -336,7 +437,10 @@ function wireUI() {
     tryUnlockAudio();
   }, { passive: true });
 
-  // Pinch-to-zoom
+  // Zoom wheel long-press + preset buttons
+  wireZoomWheel();
+
+  // Pinch-to-zoom (2 fingers on camera view)
   const cameraViewEl = document.getElementById('cameraView');
 
   cameraViewEl.addEventListener('touchstart', e => {
@@ -349,19 +453,17 @@ function wireUI() {
   cameraViewEl.addEventListener('touchmove', e => {
     if (e.touches.length === 2) {
       const dist = getPinchDist(e);
-      currentZoom = Math.min(5, Math.max(1, pinchStartZoom * (dist / pinchStartDist)));
-      applyZoom();
+      applyZoom(pinchStartZoom * (dist / pinchStartDist));
     }
   }, { passive: true });
 
-  // Double-tap to reset zoom
+  // Double-tap to reset zoom to 1×
   let lastTap = 0;
   cameraViewEl.addEventListener('touchend', e => {
     if (e.touches.length > 0) return;
     const now = Date.now();
     if (now - lastTap < 300) {
-      currentZoom = 1;
-      applyZoom();
+      applyZoom(1);
     }
     lastTap = now;
   }, { passive: true });

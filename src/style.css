@@ -594,3 +594,131 @@ button, .toolbar-btn, .segment-btn, .top-btn {
   .settings-panel { width: 360px; }
   .splash-title { font-size: 56px; }
 }
+
+/* ═══════════════════════════════════════
+   ZOOM CONTROLS
+═══════════════════════════════════════ */
+.zoom-controls {
+  position: fixed;
+  bottom: calc(80px + max(0px, env(safe-area-inset-bottom)));
+  left: 0; right: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  z-index: 48;
+  pointer-events: none;
+}
+
+/* Preset buttons row */
+.zoom-presets {
+  display: flex;
+  gap: 6px;
+  pointer-events: auto;
+}
+
+.zoom-btn {
+  min-width: 48px;
+  height: 34px;
+  padding: 0 10px;
+  border-radius: 100px;
+  border: none;
+  background: rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  color: rgba(255, 255, 255, 0.75);
+  font-family: var(--font-ui);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: background 0.18s, color 0.18s, transform 0.12s;
+  touch-action: none;
+}
+
+.zoom-btn .zoom-x {
+  font-size: 10px;
+  opacity: 0.7;
+}
+
+.zoom-btn.active {
+  background: rgba(212, 165, 116, 0.25);
+  color: var(--accent-gold);
+  border: 1px solid rgba(212, 165, 116, 0.5);
+}
+
+.zoom-btn:active {
+  transform: scale(0.93);
+}
+
+/* Wheel that appears on long press */
+.zoom-wheel-wrap {
+  width: calc(100% - 48px);
+  max-width: 340px;
+  pointer-events: auto;
+  animation: zoomWheelIn 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes zoomWheelIn {
+  from { opacity: 0; transform: translateY(8px) scale(0.95); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.zoom-wheel-track {
+  position: relative;
+  height: 36px;
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border-radius: 100px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  overflow: visible;
+}
+
+.zoom-wheel-fill {
+  position: absolute;
+  left: 0; top: 0; bottom: 0;
+  background: rgba(212, 165, 116, 0.15);
+  border-radius: 100px;
+  pointer-events: none;
+}
+
+.zoom-wheel-knob {
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: var(--accent-gold);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.4);
+  pointer-events: none;
+  transition: transform 0s; /* disable transition while dragging */
+}
+
+.zoom-wheel-value {
+  font-family: var(--font-ui);
+  font-size: 11px;
+  font-weight: 700;
+  color: #0a0a0f;
+  letter-spacing: -0.02em;
+  white-space: nowrap;
+}
+
+/* Landscape: move zoom to left side */
+@media (orientation: landscape) and (max-height: 500px) {
+  .zoom-controls {
+    bottom: auto;
+    left: auto;
+    right: 80px;
+    top: 50%;
+    transform: translateY(-50%);
+    flex-direction: column-reverse;
+  }
+  .zoom-presets { flex-direction: column; }
+  .zoom-wheel-wrap { width: 36px; max-width: none; height: 200px; }
+}

@@ -108,6 +108,27 @@
   </div>
 
   <!-- ═══════════════════════════════════════
+       ZOOM CONTROLS
+  ═══════════════════════════════════════ -->
+  <div class="zoom-controls" id="zoomControls" style="display:none">
+    <!-- Wheel — appears on long press -->
+    <div class="zoom-wheel-wrap" id="zoomWheelWrap" style="display:none">
+      <div class="zoom-wheel-track" id="zoomWheelTrack">
+        <div class="zoom-wheel-fill" id="zoomWheelFill"></div>
+        <div class="zoom-wheel-knob" id="zoomWheelKnob">
+          <span class="zoom-wheel-value" id="zoomWheelValue">1.0×</span>
+        </div>
+      </div>
+    </div>
+    <!-- Preset buttons -->
+    <div class="zoom-presets">
+      <button class="zoom-btn" id="zoomBtn05">0.5<span class="zoom-x">×</span></button>
+      <button class="zoom-btn active" id="zoomBtn1">1<span class="zoom-x">×</span></button>
+      <button class="zoom-btn" id="zoomBtn2">2<span class="zoom-x">×</span></button>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════
        BOTTOM TOOLBAR
   ═══════════════════════════════════════ -->
   <div class="bottom-toolbar" id="bottomToolbar" style="display:none">
