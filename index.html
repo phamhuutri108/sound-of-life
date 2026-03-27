@@ -1,0 +1,1654 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="theme-color" content="#0a0a0f">
+  <title>Sound of Life</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    /* ═══════════════════════════════════════
+       CSS VARIABLES
+    ═══════════════════════════════════════ */
+    :root {
+      --bg-deep: #0a0a0f;
+      --bg-panel: rgba(15, 15, 25, 0.85);
+      --bg-panel-solid: #0f0f19;
+      --text-primary: #f0ede8;
+      --text-secondary: rgba(240, 237, 232, 0.6);
+      --text-muted: rgba(240, 237, 232, 0.35);
+      --accent-gold: #d4a574;
+      --accent-gold-bright: #e8c49a;
+      --accent-gold-dim: rgba(212, 165, 116, 0.3);
+      --border-subtle: rgba(255, 255, 255, 0.08);
+      --border-active: rgba(212, 165, 116, 0.4);
+      --staff-line: rgba(255, 255, 255, 0.55);
+      --scan-line: rgba(255, 255, 255, 0.9);
+      --note-glow: rgba(212, 165, 116, 0.8);
+      --note-active: rgba(255, 240, 220, 0.9);
+      --font-display: 'Montserrat', system-ui, sans-serif;
+      --font-ui: 'Montserrat', system-ui, sans-serif;
+    }
+
+    /* ═══════════════════════════════════════
+       RESET & BASE
+    ═══════════════════════════════════════ */
+    *, *::before, *::after { box-sizing: border-box; }
+
+    html, body {
+      margin: 0; padding: 0;
+      width: 100%; height: 100%;
+      overflow: hidden;
+      background: var(--bg-deep);
+      color: var(--text-primary);
+      font-family: var(--font-ui);
+      -webkit-font-smoothing: antialiased;
+    }
+
+    body {
+      overscroll-behavior: none;
+      touch-action: manipulation;
+    }
+
+    button, .toolbar-btn, .segment-btn, .top-btn {
+      -webkit-user-select: none;
+      user-select: none;
+    }
+
+    /* ═══════════════════════════════════════
+       SPLASH SCREEN
+    ═══════════════════════════════════════ */
+    .splash {
+      position: fixed;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      background: var(--bg-deep);
+      z-index: 100;
+      transition: opacity 0.6s ease;
+    }
+
+    .splash.hidden {
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    .splash-title {
+      font-family: var(--font-display);
+      font-size: clamp(26px, 7vw, 44px);
+      font-weight: 300;
+      color: var(--accent-gold);
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      text-align: center;
+      animation: fadeInUp 1.2s ease-out;
+    }
+
+    .splash-subtitle {
+      font-family: var(--font-display);
+      font-weight: 300;
+      font-size: clamp(12px, 3vw, 14px);
+      color: var(--text-muted);
+      margin-top: 14px;
+      text-align: center;
+      padding: 0 24px;
+      letter-spacing: 0.06em;
+      animation: fadeInUp 1.2s ease-out 0.3s both;
+    }
+
+    .splash-start-btn {
+      margin-top: 48px;
+      padding: 13px 44px;
+      border: 1px solid var(--accent-gold);
+      border-radius: 100px;
+      background: transparent;
+      color: var(--accent-gold);
+      font-family: var(--font-ui);
+      font-size: 12px;
+      font-weight: 500;
+      letter-spacing: 0.22em;
+      text-transform: uppercase;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      animation: fadeInUp 1.2s ease-out 0.6s both;
+      min-height: 48px;
+    }
+
+    .splash-start-btn:hover { background: var(--accent-gold-dim); }
+    .splash-start-btn:active { background: var(--accent-gold); color: var(--bg-deep); }
+
+    .splash-lang {
+      position: absolute;
+      bottom: max(24px, env(safe-area-inset-bottom));
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      animation: fadeInUp 1.2s ease-out 0.9s both;
+    }
+
+    .lang-btn {
+      padding: 8px 16px;
+      border: 1px solid var(--border-subtle);
+      border-radius: 100px;
+      background: transparent;
+      color: var(--text-muted);
+      font-family: var(--font-ui);
+      font-size: 13px;
+      cursor: pointer;
+      transition: all 0.2s;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    .lang-btn.active {
+      border-color: var(--accent-gold);
+      color: var(--accent-gold);
+    }
+
+    /* ═══════════════════════════════════════
+       MODE SELECTION
+    ═══════════════════════════════════════ */
+    .mode-select {
+      position: fixed;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      background: var(--bg-deep);
+      z-index: 90;
+      gap: 16px;
+      padding: 32px 24px;
+      transition: opacity 0.4s ease;
+    }
+
+    .mode-select.hidden { opacity: 0; pointer-events: none; }
+
+    .mode-select-title {
+      font-family: var(--font-display);
+      font-size: 11px;
+      font-weight: 500;
+      color: var(--text-muted);
+      margin-bottom: 24px;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+    }
+
+    .mode-cards-row {
+      display: flex;
+      gap: 14px;
+      width: 100%;
+      max-width: 340px;
+    }
+
+    .mode-card {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 14px;
+      padding: 28px 16px 24px;
+      border: 1px solid var(--border-subtle);
+      border-radius: 18px;
+      background: rgba(255, 255, 255, 0.03);
+      cursor: pointer;
+      transition: border-color 0.22s, background 0.22s;
+      -webkit-tap-highlight-color: transparent;
+      animation: cardEnter 0.5s ease-out both;
+    }
+
+    .mode-card:nth-child(1) { animation-delay: 0.05s; }
+    .mode-card:nth-child(2) { animation-delay: 0.15s; }
+
+    .mode-card:hover, .mode-card:active {
+      border-color: var(--border-active);
+      background: var(--accent-gold-dim);
+    }
+
+    .mode-card svg { display: block; }
+
+    .mode-card-title {
+      font-family: var(--font-ui);
+      font-size: 11px;
+      font-weight: 500;
+      color: var(--text-secondary);
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+    }
+
+    /* ═══════════════════════════════════════
+       CAMERA VIEW
+    ═══════════════════════════════════════ */
+    .camera-view {
+      position: fixed;
+      inset: 0;
+      background: black;
+      overflow: hidden;
+      display: none;
+    }
+
+    .camera-view.active { display: block; }
+
+    .camera-video {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    .photo-preview {
+      position: absolute;
+      inset: 0;
+      background-size: cover;
+      background-position: center;
+      display: none;
+    }
+
+    .photo-preview.active { display: block; }
+
+    .staff-canvas {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+    }
+
+    /* Error message */
+    .camera-error {
+      position: absolute;
+      inset: 0;
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      background: var(--bg-deep);
+      padding: 32px;
+      text-align: center;
+      gap: 12px;
+    }
+
+    .camera-error.active { display: flex; }
+    .camera-error-text { color: var(--text-secondary); font-size: 15px; line-height: 1.6; }
+
+    /* ═══════════════════════════════════════
+       TOP BAR
+    ═══════════════════════════════════════ */
+    .top-bar {
+      position: fixed;
+      top: 0; left: 0; right: 0;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 12px 16px;
+      padding-top: max(12px, env(safe-area-inset-top));
+      z-index: 40;
+    }
+
+    .top-btn {
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      border: none;
+      background: rgba(0, 0, 0, 0.35);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      color: var(--text-primary);
+      font-size: 18px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+      transition: background 0.2s;
+    }
+
+    .top-btn:active { background: rgba(212, 165, 116, 0.3); }
+
+    .mode-badge {
+      padding: 6px 14px;
+      border-radius: 100px;
+      background: rgba(0, 0, 0, 0.35);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--accent-gold);
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+    }
+
+    /* ═══════════════════════════════════════
+       BOTTOM TOOLBAR
+    ═══════════════════════════════════════ */
+    .bottom-toolbar {
+      position: fixed;
+      bottom: 0; left: 0; right: 0;
+      display: flex;
+      align-items: center;
+      justify-content: space-around;
+      padding: 12px 16px;
+      padding-bottom: max(12px, env(safe-area-inset-bottom));
+      background: var(--bg-panel);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border-top: 1px solid var(--border-subtle);
+      z-index: 50;
+    }
+
+    .toolbar-btn {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+      padding: 8px 16px;
+      border: none;
+      background: none;
+      color: var(--text-secondary);
+      font-family: var(--font-ui);
+      font-size: 11px;
+      cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+      transition: color 0.2s;
+      min-width: 60px;
+      min-height: 44px;
+    }
+
+    .toolbar-btn.active { color: var(--accent-gold); }
+    .toolbar-btn:active { color: var(--accent-gold-bright); }
+
+    .toolbar-btn-icon { font-size: 22px; line-height: 1; }
+
+    .capture-btn {
+      width: 64px;
+      height: 64px;
+      border-radius: 50%;
+      border: 3px solid var(--text-primary);
+      background: transparent;
+      position: relative;
+      cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+      flex-shrink: 0;
+    }
+
+    .capture-btn::after {
+      content: '';
+      position: absolute;
+      inset: 4px;
+      border-radius: 50%;
+      background: var(--text-primary);
+      transition: transform 0.15s;
+    }
+
+    .capture-btn:active::after { transform: scale(0.85); }
+
+    .capture-btn.retake {
+      border-color: var(--accent-gold);
+    }
+    .capture-btn.retake::after {
+      background: var(--accent-gold);
+    }
+
+    /* ═══════════════════════════════════════
+       SETTINGS PANEL
+    ═══════════════════════════════════════ */
+    .settings-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.5);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.35s;
+      z-index: 55;
+    }
+
+    .settings-backdrop.open { opacity: 1; pointer-events: auto; }
+
+    .settings-panel {
+      position: fixed;
+      top: 0; right: 0; bottom: 0;
+      width: min(320px, 85vw);
+      background: var(--bg-panel-solid);
+      border-left: 1px solid var(--border-subtle);
+      transform: translateX(100%);
+      transition: transform 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+      z-index: 60;
+      overflow-y: auto;
+      padding: 20px;
+      padding-top: max(20px, env(safe-area-inset-top));
+    }
+
+    .settings-panel.open { transform: translateX(0); }
+
+    .settings-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 28px;
+    }
+
+    .settings-title {
+      font-family: var(--font-display);
+      font-size: 16px;
+      font-weight: 500;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--text-primary);
+    }
+
+    .settings-close {
+      width: 32px; height: 32px;
+      border-radius: 50%;
+      border: none;
+      background: rgba(255, 255, 255, 0.06);
+      color: var(--text-secondary);
+      font-size: 18px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    .setting-group { margin-bottom: 28px; }
+
+    .setting-label {
+      font-family: var(--font-ui);
+      font-size: 11px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      margin-bottom: 10px;
+    }
+
+    /* Segment controls */
+    .segment-control {
+      display: grid;
+      gap: 6px;
+      background: rgba(255, 255, 255, 0.04);
+      border-radius: 10px;
+      padding: 4px;
+    }
+
+    .segment-control.cols-2 { grid-template-columns: repeat(2, 1fr); }
+    .segment-control.cols-3 { grid-template-columns: repeat(3, 1fr); }
+    .segment-control.cols-4 { grid-template-columns: repeat(2, 1fr); }
+
+    .segment-btn {
+      padding: 10px 8px;
+      border: none;
+      border-radius: 8px;
+      background: transparent;
+      color: var(--text-secondary);
+      font-family: var(--font-ui);
+      font-size: 13px;
+      cursor: pointer;
+      transition: all 0.2s;
+      -webkit-tap-highlight-color: transparent;
+      text-align: center;
+    }
+
+    .segment-btn.active {
+      background: var(--accent-gold-dim);
+      color: var(--accent-gold-bright);
+    }
+
+    /* Slider controls */
+    .slider-control {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .slider-control input[type="range"] {
+      flex: 1;
+      -webkit-appearance: none;
+      appearance: none;
+      height: 4px;
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 2px;
+      outline: none;
+    }
+
+    .slider-control input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 22px; height: 22px;
+      border-radius: 50%;
+      background: var(--accent-gold);
+      cursor: pointer;
+    }
+
+    .slider-control input[type="range"]::-moz-range-thumb {
+      width: 22px; height: 22px;
+      border-radius: 50%;
+      background: var(--accent-gold);
+      border: none;
+      cursor: pointer;
+    }
+
+    .slider-label {
+      font-size: 11px;
+      color: var(--text-muted);
+      min-width: 30px;
+      text-align: center;
+    }
+
+    /* Settings divider */
+    .settings-divider {
+      border: none;
+      border-top: 1px solid var(--border-subtle);
+      margin: 4px 0 28px;
+    }
+
+    /* ═══════════════════════════════════════
+       OPENCV STATUS
+    ═══════════════════════════════════════ */
+    .opencv-status {
+      position: fixed;
+      top: max(60px, calc(env(safe-area-inset-top) + 56px));
+      left: 50%;
+      transform: translateX(-50%);
+      padding: 5px 12px;
+      border-radius: 100px;
+      background: var(--bg-panel);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      font-size: 11px;
+      color: var(--text-muted);
+      z-index: 45;
+      transition: opacity 0.8s;
+      white-space: nowrap;
+    }
+
+    .opencv-status.loaded { opacity: 0; pointer-events: none; }
+
+    /* ═══════════════════════════════════════
+       ANIMATIONS
+    ═══════════════════════════════════════ */
+    @keyframes fadeInUp {
+      from { opacity: 0; transform: translateY(20px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    @keyframes cardEnter {
+      from { opacity: 0; transform: translateY(24px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    @keyframes pulse {
+      0% { transform: scale(1); opacity: 1; }
+      100% { transform: scale(2.5); opacity: 0; }
+    }
+
+    /* ═══════════════════════════════════════
+       LANDSCAPE MOBILE
+    ═══════════════════════════════════════ */
+    @media (orientation: landscape) and (max-height: 500px) {
+      .bottom-toolbar {
+        bottom: auto; right: 0; top: 0; left: auto;
+        width: 72px; height: 100%;
+        flex-direction: column;
+        padding: 16px 8px;
+        padding-right: max(8px, env(safe-area-inset-right));
+        border-top: none;
+        border-left: 1px solid var(--border-subtle);
+        justify-content: space-around;
+      }
+      .capture-btn { width: 52px; height: 52px; }
+      .toolbar-btn { padding: 8px; min-width: auto; }
+    }
+
+    /* ═══════════════════════════════════════
+       TABLET / DESKTOP
+    ═══════════════════════════════════════ */
+    @media (min-width: 768px) {
+      .settings-panel { width: 360px; }
+      .splash-title { font-size: 56px; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ═══════════════════════════════════════
+       SPLASH SCREEN
+  ═══════════════════════════════════════ -->
+  <div class="splash" id="splash">
+    <div class="splash-title" id="txt-app-title">Sound of Life</div>
+    <div class="splash-subtitle" id="txt-tagline">Bông ơi Bông à, lên ăn cơm vàng, cơm bạc nhà ta</div>
+    <button class="splash-start-btn" id="startBtn" onclick="onStart()">
+      <span id="txt-start">Start</span>
+    </button>
+    <div class="splash-lang">
+      <button class="lang-btn active" id="langEN" onclick="setLanguage('en')">EN</button>
+      <button class="lang-btn" id="langVI" onclick="setLanguage('vi')">VI</button>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════
+       MODE SELECTION
+  ═══════════════════════════════════════ -->
+  <div class="mode-select hidden" id="modeSelect">
+    <div class="mode-select-title" id="txt-choose-mode">Choose your mode</div>
+    <div class="mode-cards-row">
+      <div class="mode-card" onclick="selectMode('photo')">
+        <!-- Aperture / shutter icon -->
+        <svg width="44" height="44" viewBox="0 0 44 44" fill="none" stroke="rgba(240,237,232,0.7)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="22" cy="22" r="10"/>
+          <line x1="22" y1="12" x2="22" y2="6"/>
+          <line x1="22" y1="38" x2="22" y2="32"/>
+          <line x1="12" y1="22" x2="6" y2="22"/>
+          <line x1="38" y1="22" x2="32" y2="22"/>
+          <line x1="14.9" y1="14.9" x2="10.4" y2="10.4"/>
+          <line x1="33.6" y1="33.6" x2="29.1" y2="29.1"/>
+          <line x1="29.1" y1="14.9" x2="33.6" y2="10.4"/>
+          <line x1="10.4" y1="33.6" x2="14.9" y2="29.1"/>
+        </svg>
+        <div class="mode-card-title" id="txt-photo-mode">Photo</div>
+      </div>
+      <div class="mode-card" onclick="selectMode('live')">
+        <!-- Waveform / live icon -->
+        <svg width="44" height="44" viewBox="0 0 44 44" fill="none" stroke="rgba(240,237,232,0.7)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="4,22 10,14 16,30 22,10 28,34 34,18 40,22"/>
+        </svg>
+        <div class="mode-card-title" id="txt-live-mode">Live</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════
+       CAMERA VIEW
+  ═══════════════════════════════════════ -->
+  <div class="camera-view" id="cameraView">
+    <video id="cameraVideo" class="camera-video" playsinline autoplay muted></video>
+    <div class="photo-preview" id="photoPreview"></div>
+    <canvas id="staffCanvas" class="staff-canvas"></canvas>
+
+    <!-- Camera error -->
+    <div class="camera-error" id="cameraError">
+      <svg width="40" height="40" viewBox="0 0 40 40" fill="none" stroke="rgba(240,237,232,0.4)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="3" y="10" width="34" height="24" rx="4"/>
+        <circle cx="20" cy="22" r="7"/>
+        <circle cx="20" cy="22" r="3" fill="rgba(240,237,232,0.4)" stroke="none"/>
+        <rect x="14" y="6" width="12" height="5" rx="2"/>
+      </svg>
+      <div class="camera-error-text" id="txt-camera-error">Camera access required.<br>Please allow camera permissions and reload.</div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════
+       TOP BAR
+  ═══════════════════════════════════════ -->
+  <div class="top-bar" id="topBar" style="display:none">
+    <!-- Flip: rotate icon -->
+    <button class="top-btn" id="flipBtn" onclick="flipCamera()" title="Flip camera">
+      <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M14 4a7 7 0 1 0 1.8 4.5"/>
+        <polyline points="16,1 16,5.5 11.5,5.5"/>
+      </svg>
+    </button>
+    <div class="mode-badge" id="modeBadge">PHOTO</div>
+    <!-- Settings: sliders icon -->
+    <button class="top-btn" onclick="openSettings()" title="Settings">
+      <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round">
+        <line x1="2" y1="5" x2="16" y2="5"/>
+        <line x1="2" y1="9" x2="16" y2="9"/>
+        <line x1="2" y1="13" x2="16" y2="13"/>
+        <circle cx="6" cy="5" r="1.8" fill="var(--bg-panel-solid)" stroke="currentColor" stroke-width="1.6"/>
+        <circle cx="11" cy="9" r="1.8" fill="var(--bg-panel-solid)" stroke="currentColor" stroke-width="1.6"/>
+        <circle cx="7" cy="13" r="1.8" fill="var(--bg-panel-solid)" stroke="currentColor" stroke-width="1.6"/>
+      </svg>
+    </button>
+  </div>
+
+  <!-- ═══════════════════════════════════════
+       BOTTOM TOOLBAR
+  ═══════════════════════════════════════ -->
+  <div class="bottom-toolbar" id="bottomToolbar" style="display:none">
+    <!-- Capture / Retake -->
+    <button class="capture-btn" id="captureBtn" onclick="onCapture()"></button>
+
+    <!-- Play / Pause -->
+    <button class="toolbar-btn active" id="playBtn" onclick="togglePlay()">
+      <span class="toolbar-btn-icon" id="playIcon">
+        <!-- Pause icon (default) -->
+        <svg id="iconPause" width="22" height="22" viewBox="0 0 22 22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+          <line x1="8" y1="5" x2="8" y2="17"/>
+          <line x1="14" y1="5" x2="14" y2="17"/>
+        </svg>
+        <!-- Play icon (hidden by default) -->
+        <svg id="iconPlay" width="22" height="22" viewBox="0 0 22 22" fill="currentColor" style="display:none">
+          <polygon points="6,4 18,11 6,18"/>
+        </svg>
+      </span>
+      <span id="txt-play">Pause</span>
+    </button>
+
+    <!-- Mode switch -->
+    <button class="toolbar-btn" onclick="switchMode()">
+      <span class="toolbar-btn-icon">
+        <svg width="22" height="22" viewBox="0 0 22 22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="3" y="3" width="7" height="7" rx="1.5"/>
+          <rect x="12" y="12" width="7" height="7" rx="1.5"/>
+          <line x1="12" y1="5.5" x2="19" y2="5.5"/>
+          <polyline points="16.5,3 19,5.5 16.5,8"/>
+          <line x1="10" y1="16.5" x2="3" y2="16.5"/>
+          <polyline points="5.5,19 3,16.5 5.5,14"/>
+        </svg>
+      </span>
+      <span id="txt-switch">Mode</span>
+    </button>
+  </div>
+
+  <!-- ═══════════════════════════════════════
+       SETTINGS BACKDROP + PANEL
+  ═══════════════════════════════════════ -->
+  <div class="settings-backdrop" id="settingsBackdrop" onclick="closeSettings()"></div>
+
+  <div class="settings-panel" id="settingsPanel">
+    <div class="settings-header">
+      <div class="settings-title" id="txt-settings">Settings</div>
+      <button class="settings-close" onclick="closeSettings()">✕</button>
+    </div>
+
+    <!-- Instrument -->
+    <div class="setting-group">
+      <div class="setting-label" id="txt-instrument">Instrument</div>
+      <div class="segment-control cols-4">
+        <button class="segment-btn active" onclick="setInstrument('ambient')" id="btn-inst-ambient">
+          <span id="txt-ambient">Ambient</span>
+        </button>
+        <button class="segment-btn" onclick="setInstrument('piano')" id="btn-inst-piano">Piano</button>
+        <button class="segment-btn" onclick="setInstrument('marimba')" id="btn-inst-marimba">Marimba</button>
+        <button class="segment-btn" onclick="setInstrument('kalimba')" id="btn-inst-kalimba">Kalimba</button>
+      </div>
+    </div>
+
+    <!-- Scale -->
+    <div class="setting-group">
+      <div class="setting-label" id="txt-scale">Scale</div>
+      <div class="segment-control cols-3">
+        <button class="segment-btn active" onclick="setScale('pentatonic')" id="btn-scale-pentatonic">
+          <span id="txt-pentatonic">Pentatonic</span>
+        </button>
+        <button class="segment-btn" onclick="setScale('major')" id="btn-scale-major">
+          <span id="txt-major">Major</span>
+        </button>
+        <button class="segment-btn" onclick="setScale('minor')" id="btn-scale-minor">
+          <span id="txt-minor">Minor</span>
+        </button>
+      </div>
+    </div>
+
+    <hr class="settings-divider">
+
+    <!-- Scan Speed -->
+    <div class="setting-group">
+      <div class="setting-label" id="txt-scan-speed">Scan Speed</div>
+      <div class="slider-control">
+        <span class="slider-label" id="txt-slow">Slow</span>
+        <input type="range" id="speedSlider" min="1" max="5" value="2" step="0.5"
+               oninput="setScanSpeed(this.value)">
+        <span class="slider-label" id="txt-fast">Fast</span>
+      </div>
+    </div>
+
+    <!-- Sensitivity -->
+    <div class="setting-group">
+      <div class="setting-label" id="txt-sensitivity">Sensitivity</div>
+      <div class="slider-control">
+        <span class="slider-label" id="txt-low">Low</span>
+        <input type="range" id="sensitivitySlider" min="0" max="100" value="50"
+               oninput="sensitivity = parseInt(this.value)">
+        <span class="slider-label" id="txt-high">High</span>
+      </div>
+    </div>
+
+    <hr class="settings-divider">
+
+    <!-- Camera -->
+    <div class="setting-group">
+      <div class="setting-label" id="txt-camera">Camera</div>
+      <div class="segment-control cols-2">
+        <button class="segment-btn" onclick="setCameraFacing('user')" id="btn-cam-front">
+          <span id="txt-front">Front</span>
+        </button>
+        <button class="segment-btn active" onclick="setCameraFacing('environment')" id="btn-cam-back">
+          <span id="txt-back">Back</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Language -->
+    <div class="setting-group">
+      <div class="setting-label" id="txt-language">Language</div>
+      <div class="segment-control cols-2">
+        <button class="segment-btn active" onclick="setLanguage('en')" id="set-langEN">English</button>
+        <button class="segment-btn" onclick="setLanguage('vi')" id="set-langVI">Tiếng Việt</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════
+       OPENCV STATUS
+  ═══════════════════════════════════════ -->
+  <div class="opencv-status" id="opencvStatus" style="display:none">
+    ⏳ <span id="txt-loading">Loading edge detection…</span>
+  </div>
+
+  <!-- CDN -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
+  <script async src="https://docs.opencv.org/4.9.0/opencv.js" onload="onOpenCVReady()"></script>
+
+  <script>
+  /* ═══════════════════════════════════════════════════════════════
+     i18n
+  ═══════════════════════════════════════════════════════════════ */
+  const I18N = {
+    en: {
+      'app-title': 'Sound of Life',
+      'tagline': 'Bông ơi Bông à, lên ăn cơm vàng, cơm bạc nhà ta',
+      'start': 'Start',
+      'loading': 'Loading edge detection…',
+      'camera-error': 'Camera access required.\nPlease allow camera permissions and reload.',
+      'choose-mode': 'Choose your mode',
+      'photo-mode': 'PHOTO',
+      'photo-desc': 'Capture a moment and compose its melody',
+      'live-mode': 'LIVE',
+      'live-desc': 'Real-time melody from the world around you',
+      'settings': 'Settings',
+      'instrument': 'Instrument',
+      'ambient': 'Ambient',
+      'scale': 'Scale',
+      'pentatonic': 'Pentatonic',
+      'major': 'Major',
+      'minor': 'Minor',
+      'scan-speed': 'Scan Speed',
+      'slow': 'Slow',
+      'fast': 'Fast',
+      'sensitivity': 'Sensitivity',
+      'low': 'Low',
+      'high': 'High',
+      'camera': 'Camera',
+      'front': 'Front',
+      'back': 'Back',
+      'language': 'Language',
+      'play': 'Play',
+      'pause': 'Pause',
+      'switch': 'Mode',
+      'capture': 'Capture',
+      'retake': 'Retake',
+    },
+    vi: {
+      'app-title': 'Âm Thanh Cuộc Sống',
+      'tagline': 'Bông ơi Bông à,lên ăn cơm vàng, cơm bạc nhà ta',
+      'start': 'Bắt đầu',
+      'loading': 'Đang tải nhận diện cạnh…',
+      'camera-error': 'Cần quyền truy cập camera.\nVui lòng cho phép camera và tải lại trang.',
+      'choose-mode': 'Chọn chế độ',
+      'photo-mode': 'ẢNH',
+      'photo-desc': 'Chụp một khoảnh khắc và tạo giai điệu',
+      'live-mode': 'TRỰC TIẾP',
+      'live-desc': 'Giai điệu thời gian thực từ thế giới xung quanh',
+      'settings': 'Cài đặt',
+      'instrument': 'Nhạc cụ',
+      'ambient': 'Không gian',
+      'scale': 'Thang âm',
+      'pentatonic': 'Ngũ cung',
+      'major': 'Trưởng',
+      'minor': 'Thứ',
+      'scan-speed': 'Tốc độ quét',
+      'slow': 'Chậm',
+      'fast': 'Nhanh',
+      'sensitivity': 'Độ nhạy',
+      'low': 'Thấp',
+      'high': 'Cao',
+      'camera': 'Máy ảnh',
+      'front': 'Trước',
+      'back': 'Sau',
+      'language': 'Ngôn ngữ',
+      'play': 'Phát',
+      'pause': 'Dừng',
+      'switch': 'Chế độ',
+      'capture': 'Chụp',
+      'retake': 'Chụp lại',
+    }
+  };
+
+  let currentLang = 'en';
+  const txtIds = [
+    'app-title','tagline','start','loading','camera-error','choose-mode',
+    'photo-mode','photo-desc','live-mode','live-desc','settings','instrument',
+    'ambient','scale','pentatonic','major','minor','scan-speed','slow','fast',
+    'sensitivity','low','high','camera','front','back','language',
+  ];
+
+  function t(key) { return I18N[currentLang][key] || I18N['en'][key] || key; }
+
+  function setLanguage(lang) {
+    currentLang = lang;
+    document.documentElement.lang = lang;
+
+    // Update all translated text nodes
+    txtIds.forEach(key => {
+      const el = document.getElementById('txt-' + key);
+      if (el) el.textContent = t(key);
+    });
+
+    // Update button labels contextually
+    updatePlayBtnLabel();
+
+    // Update language buttons splash
+    document.getElementById('langEN').classList.toggle('active', lang === 'en');
+    document.getElementById('langVI').classList.toggle('active', lang === 'vi');
+    document.getElementById('set-langEN').classList.toggle('active', lang === 'en');
+    document.getElementById('set-langVI').classList.toggle('active', lang === 'vi');
+
+    // Capture btn label
+    updateCaptureLabel();
+  }
+
+  function updatePlayBtnLabel() {
+    const playTxt = document.getElementById('txt-play');
+    if (isPlaying) {
+      playTxt.textContent = t('pause');
+    } else {
+      playTxt.textContent = t('play');
+    }
+  }
+
+  function updateCaptureLabel() {
+    // No text label on capture btn (it's a circle) — nothing to do
+  }
+
+  /* ═══════════════════════════════════════════════════════════════
+     APP STATE
+  ═══════════════════════════════════════════════════════════════ */
+  let appMode = 'photo'; // 'photo' | 'live'
+  let isPlaying = true;
+  let cameraFacing = 'environment';
+  let currentStream = null;
+  let photoDataURL = null;
+  let sensitivity = 50;
+
+  /* ═══════════════════════════════════════════════════════════════
+     AUDIO
+  ═══════════════════════════════════════════════════════════════ */
+  let audioReady = false;
+  const instruments = { ambient: null, piano: null, marimba: null, kalimba: null };
+  let currentInstrument = 'ambient';
+  let currentScale = 'pentatonic';
+
+  const SCALES = {
+    pentatonic: { notes: ['C3','D3','E3','G3','A3','C4','D4','E4','G4','A4','C5','D5','E5'] },
+    major:      { notes: ['C3','D3','E3','F3','G3','A3','B3','C4','D4','E4','F4','G4','A4'] },
+    minor:      { notes: ['C3','D3','Eb3','F3','G3','Ab3','Bb3','C4','D4','Eb4','F4','G4','Ab4'] },
+  };
+
+  async function initAudio() {
+    if (audioReady) return;
+    await Tone.start();
+    audioReady = true;
+    setupInstruments();
+  }
+
+  function createAmbientSynth() {
+    const synth = new Tone.PolySynth(Tone.Synth, {
+      oscillator: { type: 'sine' },
+      envelope: { attack: 0.15, decay: 0.4, sustain: 0.5, release: 2.0 },
+      volume: -14,
+    });
+    const reverb = new Tone.Reverb({ decay: 4, wet: 0.5 });
+    const delay = new Tone.FeedbackDelay('8n', 0.2);
+    delay.wet.value = 0.15;
+    synth.chain(delay, reverb, Tone.Destination);
+    return synth;
+  }
+
+  function createPianoSynth() {
+    const synth = new Tone.PolySynth(Tone.AMSynth, {
+      harmonicity: 2,
+      oscillator: { type: 'triangle' },
+      envelope: { attack: 0.01, decay: 0.8, sustain: 0.2, release: 1.0 },
+      modulation: { type: 'square' },
+      modulationEnvelope: { attack: 0.5, decay: 0.1, sustain: 0.3, release: 0.5 },
+      volume: -10,
+    });
+    const reverb = new Tone.Reverb({ decay: 2, wet: 0.25 });
+    synth.connect(reverb);
+    reverb.toDestination();
+    return synth;
+  }
+
+  function createMarimbaSynth() {
+    const synth = new Tone.PolySynth(Tone.FMSynth, {
+      harmonicity: 3.5,
+      modulationIndex: 10,
+      oscillator: { type: 'sine' },
+      envelope: { attack: 0.001, decay: 0.4, sustain: 0.01, release: 0.5 },
+      modulation: { type: 'triangle' },
+      modulationEnvelope: { attack: 0.001, decay: 0.2, sustain: 0.01, release: 0.3 },
+      volume: -8,
+    });
+    const reverb = new Tone.Reverb({ decay: 1.5, wet: 0.2 });
+    synth.connect(reverb);
+    reverb.toDestination();
+    return synth;
+  }
+
+  function createKalimbaSynth() {
+    const synth = new Tone.PolySynth(Tone.Synth, {
+      oscillator: { type: 'triangle8' },
+      envelope: { attack: 0.005, decay: 0.6, sustain: 0.1, release: 1.5 },
+      volume: -10,
+    });
+    const reverb = new Tone.Reverb({ decay: 2.5, wet: 0.35 });
+    const chorus = new Tone.Chorus(4, 2.5, 0.5).start();
+    chorus.wet.value = 0.15;
+    synth.chain(chorus, reverb, Tone.Destination);
+    return synth;
+  }
+
+  function setupInstruments() {
+    instruments.ambient  = createAmbientSynth();
+    instruments.piano    = createPianoSynth();
+    instruments.marimba  = createMarimbaSynth();
+    instruments.kalimba  = createKalimbaSynth();
+  }
+
+  function switchInstrument(name) {
+    if (instruments[currentInstrument]) instruments[currentInstrument].releaseAll();
+    currentInstrument = name;
+  }
+
+  function playNote(note, velocity = 0.7) {
+    const synth = instruments[currentInstrument];
+    if (synth && audioReady) {
+      synth.triggerAttackRelease(note, '8n', Tone.now(), velocity);
+    }
+  }
+
+  function getNoteForPosition(idx) {
+    const notes = SCALES[currentScale].notes;
+    return notes[Math.min(idx, notes.length - 1)];
+  }
+
+  function confidenceToVelocity(conf) { return 0.3 + conf * 0.6; }
+
+  function setInstrument(name) {
+    switchInstrument(name);
+    document.querySelectorAll('[id^="btn-inst-"]').forEach(b => b.classList.remove('active'));
+    document.getElementById('btn-inst-' + name).classList.add('active');
+  }
+
+  function setScale(name) {
+    currentScale = name;
+    document.querySelectorAll('[id^="btn-scale-"]').forEach(b => b.classList.remove('active'));
+    document.getElementById('btn-scale-' + name).classList.add('active');
+  }
+
+  /* ═══════════════════════════════════════════════════════════════
+     CAMERA
+  ═══════════════════════════════════════════════════════════════ */
+  const video = document.getElementById('cameraVideo');
+
+  async function startCamera(facing = 'environment') {
+    if (currentStream) {
+      currentStream.getTracks().forEach(t => t.stop());
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: facing, width: { ideal: 1280 }, height: { ideal: 720 } },
+        audio: false,
+      });
+      currentStream = stream;
+      video.srcObject = stream;
+      await video.play();
+      document.getElementById('cameraError').classList.remove('active');
+    } catch (err) {
+      console.error('Camera error:', err);
+      document.getElementById('cameraError').classList.add('active');
+    }
+  }
+
+  async function flipCamera() {
+    cameraFacing = cameraFacing === 'environment' ? 'user' : 'environment';
+    document.getElementById('btn-cam-front').classList.toggle('active', cameraFacing === 'user');
+    document.getElementById('btn-cam-back').classList.toggle('active', cameraFacing === 'environment');
+    if (appMode === 'live' || !photoDataURL) {
+      await startCamera(cameraFacing);
+    }
+  }
+
+  async function setCameraFacing(facing) {
+    cameraFacing = facing;
+    document.getElementById('btn-cam-front').classList.toggle('active', facing === 'user');
+    document.getElementById('btn-cam-back').classList.toggle('active', facing === 'environment');
+    closeSettings();
+    if (appMode === 'live' || !photoDataURL) {
+      await startCamera(cameraFacing);
+    }
+  }
+
+  /* ═══════════════════════════════════════════════════════════════
+     STAFF RENDERING
+  ═══════════════════════════════════════════════════════════════ */
+  const canvas = document.getElementById('staffCanvas');
+  const ctx = canvas.getContext('2d');
+  let staffData = null;
+
+  function resizeCanvas() {
+    const rect = document.getElementById('cameraView').getBoundingClientRect();
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width  = rect.width  * dpr;
+    canvas.height = rect.height * dpr;
+    canvas.style.width  = rect.width  + 'px';
+    canvas.style.height = rect.height + 'px';
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    staffData = calculateStaffPositions(canvas.width, canvas.height);
+  }
+
+  function calculateStaffPositions(canvasW, canvasH) {
+    const dpr = window.devicePixelRatio || 1;
+    const W = canvasW / dpr;
+    const H = canvasH / dpr;
+    const marginTop    = H * 0.12;
+    const marginBottom = H * 0.12;
+    const staffTop     = marginTop;
+    const staffBottom  = H - marginBottom;
+    const staffHeight  = staffBottom - staffTop;
+    const N = 13;
+    const spacing = staffHeight / (N - 1);
+    const positions = [];
+    for (let i = 0; i < N; i++) {
+      positions.push({
+        index: i,
+        y: staffBottom - i * spacing,
+        isLine:   [2, 4, 6, 8, 10].includes(i),
+        isLedger: i === 0,
+      });
+    }
+    return {
+      positions, spacing,
+      staffTop, staffBottom,
+      staffLeft:  W * 0.12,
+      staffRight: W * 0.97,
+      displayWidth: W,
+      displayHeight: H,
+    };
+  }
+
+  function drawStaffLines(sd) {
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.55)';
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash([]);
+    sd.positions.forEach(pos => {
+      if (pos.isLine) {
+        ctx.beginPath();
+        ctx.moveTo(sd.staffLeft, pos.y);
+        ctx.lineTo(sd.staffRight, pos.y);
+        ctx.stroke();
+      }
+      if (pos.isLedger) {
+        const cx  = sd.displayWidth / 2;
+        const hw  = sd.spacing * 2;
+        ctx.strokeStyle = 'rgba(255,255,255,0.35)';
+        ctx.setLineDash([4, 3]);
+        ctx.beginPath();
+        ctx.moveTo(cx - hw, pos.y);
+        ctx.lineTo(cx + hw, pos.y);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.55)';
+      }
+    });
+  }
+
+  function drawTrebleClef(sd) {
+    const clefX = sd.staffLeft - 4;
+    const clefY = (sd.staffTop + sd.staffBottom) / 2;
+    const clefSize = (sd.staffBottom - sd.staffTop) * 1.0;
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+    ctx.font = `${clefSize}px serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('\u{1D11E}', clefX, clefY);
+  }
+
+  function drawScanLine(scanX, sd) {
+    const g = ctx.createLinearGradient(scanX - 6, 0, scanX + 6, 0);
+    g.addColorStop(0,   'rgba(255,255,255,0)');
+    g.addColorStop(0.3, 'rgba(255,255,255,0.4)');
+    g.addColorStop(0.5, 'rgba(255,255,255,0.9)');
+    g.addColorStop(0.7, 'rgba(255,255,255,0.4)');
+    g.addColorStop(1,   'rgba(255,255,255,0)');
+    ctx.fillStyle = g;
+    ctx.fillRect(scanX - 6, 0, 12, sd.displayHeight);
+  }
+
+  function drawNoteIndicator(x, y, active, confidence = 1) {
+    if (!active) {
+      ctx.fillStyle = 'rgba(255,255,255,0.12)';
+      ctx.beginPath();
+      ctx.arc(x, y, 3.5, 0, Math.PI * 2);
+      ctx.fill();
+      return;
+    }
+    const alpha = 0.5 + confidence * 0.5;
+    const glow = ctx.createRadialGradient(x, y, 0, x, y, 22);
+    glow.addColorStop(0,   `rgba(212,165,116,${alpha})`);
+    glow.addColorStop(0.5, `rgba(212,165,116,${alpha * 0.4})`);
+    glow.addColorStop(1,   'rgba(212,165,116,0)');
+    ctx.fillStyle = glow;
+    ctx.beginPath();
+    ctx.arc(x, y, 22, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = `rgba(255,240,220,${alpha})`;
+    ctx.beginPath();
+    ctx.ellipse(x, y, 8, 6, -0.3, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  function renderStaff(scanX, detectionResults) {
+    if (!staffData) return;
+    const sd = staffData;
+    ctx.clearRect(0, 0, sd.displayWidth, sd.displayHeight);
+    drawStaffLines(sd);
+    drawTrebleClef(sd);
+    if (isPlaying && scanX >= sd.staffLeft && scanX <= sd.staffRight) {
+      drawScanLine(scanX, sd);
+    }
+    if (detectionResults) {
+      sd.positions.forEach((pos, i) => {
+        const r = detectionResults[i];
+        drawNoteIndicator(scanX, pos.y, r?.detected, r?.confidence);
+      });
+    } else {
+      // draw passive indicators
+      sd.positions.forEach(pos => {
+        drawNoteIndicator(scanX, pos.y, false, 0);
+      });
+    }
+  }
+
+  /* ═══════════════════════════════════════════════════════════════
+     SCAN LINE
+  ═══════════════════════════════════════════════════════════════ */
+  let scanX = 0;
+  let scanSpeed = 1.6; // px/frame at 60fps
+
+  function setScanSpeed(val) {
+    scanSpeed = parseFloat(val) * 0.8 + 0.5;
+  }
+
+  function advanceScanLine() {
+    if (!staffData) return;
+    scanX += scanSpeed;
+    if (scanX > staffData.staffRight) {
+      scanX = staffData.staffLeft;
+      Object.keys(noteCooldowns).forEach(k => delete noteCooldowns[k]);
+    }
+    return scanX;
+  }
+
+  /* ═══════════════════════════════════════════════════════════════
+     DETECTION
+  ═══════════════════════════════════════════════════════════════ */
+  const noteCooldowns = {};
+
+  function shouldTriggerNote(noteId, now, cooldownMs = 180) {
+    const last = noteCooldowns[noteId] || 0;
+    if (now - last < cooldownMs) return false;
+    noteCooldowns[noteId] = now;
+    return true;
+  }
+
+  function computeAdaptiveThreshold(imageData) {
+    const px = imageData.data;
+    let mn = 255, mx = 0;
+    for (let i = 0; i < px.length; i += 16) {
+      const g = 0.299 * px[i] + 0.587 * px[i + 1] + 0.114 * px[i + 2];
+      if (g < mn) mn = g;
+      if (g > mx) mx = g;
+    }
+    return Math.max(20, Math.min(80, (mx - mn) * 0.3));
+  }
+
+  function getAdjustedThreshold(base, sens) {
+    return base * (1.5 - sens / 100);
+  }
+
+  // Offscreen canvas for detection
+  const detectionCanvas = document.createElement('canvas');
+  const detectionCtx = detectionCanvas.getContext('2d', { willReadFrequently: true });
+
+  function getSourceElement() {
+    if (appMode === 'photo' && photoDataURL) return document.getElementById('photoPreview');
+    return video;
+  }
+
+  function captureToDetectionCanvas() {
+    const src = appMode === 'photo' && photoDataURL ? null : video;
+    const W = 320, H = 240;
+    detectionCanvas.width = W;
+    detectionCanvas.height = H;
+
+    if (appMode === 'photo' && photoImgEl) {
+      detectionCtx.drawImage(photoImgEl, 0, 0, W, H);
+    } else if (video.readyState >= 2) {
+      detectionCtx.drawImage(video, 0, 0, W, H);
+    } else {
+      return null;
+    }
+    return { canvas: detectionCanvas, scaleX: W / (staffData?.displayWidth || W), scaleY: H / (staffData?.displayHeight || H) };
+  }
+
+  function detectBrightnessAtPositions(frameData, notePositions, scanXScaled) {
+    const { imageData, width, height } = frameData;
+    const px = imageData.data;
+    const base = computeAdaptiveThreshold(imageData);
+    const threshold = getAdjustedThreshold(base, sensitivity);
+
+    // Global average
+    let globalSum = 0, globalCount = 0;
+    for (let i = 0; i < px.length; i += 16) {
+      globalSum += 0.299 * px[i] + 0.587 * px[i + 1] + 0.114 * px[i + 2];
+      globalCount++;
+    }
+    const globalAvg = globalSum / globalCount;
+
+    const sampleW = 12, sampleH = 8;
+    return notePositions.map(pos => {
+      const cx = Math.round(scanXScaled);
+      const cy = Math.round(pos.yScaled);
+      let localSum = 0, localCount = 0;
+      for (let dy = -sampleH; dy <= sampleH; dy++) {
+        for (let dx = -sampleW; dx <= sampleW; dx++) {
+          const px2 = cx + dx, py2 = cy + dy;
+          if (px2 >= 0 && px2 < width && py2 >= 0 && py2 < height) {
+            const idx = (py2 * width + px2) * 4;
+            localSum += 0.299 * px[idx] + 0.587 * px[idx + 1] + 0.114 * px[idx + 2];
+            localCount++;
+          }
+        }
+      }
+      const localAvg = localCount > 0 ? localSum / localCount : globalAvg;
+      const diff = Math.abs(localAvg - globalAvg);
+      return diff > threshold;
+    });
+  }
+
+  let cvReady = false;
+
+  function onOpenCVReady() {
+    cvReady = true;
+    const el = document.getElementById('opencvStatus');
+    el.classList.add('loaded');
+    setTimeout(() => el.style.display = 'none', 900);
+  }
+
+  function detectEdgesAtPositions(detCanvas, notePositions, scanXScaled) {
+    if (!cvReady) return null;
+    try {
+      const src = cv.imread(detCanvas);
+      const gray = new cv.Mat(), blurred = new cv.Mat(), edges = new cv.Mat();
+      cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY);
+      cv.GaussianBlur(gray, blurred, new cv.Size(5, 5), 1.5);
+      cv.Canny(blurred, edges, 50, 150);
+      const sw = 12, sh = 8;
+      const results = notePositions.map(pos => {
+        const cx = Math.round(scanXScaled);
+        const cy = Math.round(pos.yScaled);
+        let edgeCount = 0, total = 0;
+        for (let dy = -sh; dy <= sh; dy++) {
+          for (let dx = -sw; dx <= sw; dx++) {
+            const py = cy + dy, px = cx + dx;
+            if (py >= 0 && py < edges.rows && px >= 0 && px < edges.cols) {
+              total++;
+              if (edges.ucharAt(py, px) > 0) edgeCount++;
+            }
+          }
+        }
+        return total > 0 && edgeCount / total > 0.05;
+      });
+      src.delete(); gray.delete(); blurred.delete(); edges.delete();
+      return results;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function detectObjects() {
+    if (!staffData) return null;
+    const cap = captureToDetectionCanvas();
+    if (!cap) return null;
+
+    const { canvas: detCanvas, scaleX, scaleY } = cap;
+    const imageData = detectionCtx.getImageData(0, 0, detCanvas.width, detCanvas.height);
+    const frameData = { imageData, width: detCanvas.width, height: detCanvas.height };
+
+    const scanXScaled = scanX * scaleX;
+    const notePositions = staffData.positions.map(pos => ({
+      ...pos,
+      yScaled: pos.y * scaleY,
+    }));
+
+    const brightness = detectBrightnessAtPositions(frameData, notePositions, scanXScaled);
+    const edges = detectEdgesAtPositions(detCanvas, notePositions, scanXScaled);
+
+    return notePositions.map((pos, i) => {
+      const byB = brightness[i];
+      const byE = edges ? edges[i] : false;
+      return {
+        detected: byB || byE,
+        confidence: (byB ? 0.5 : 0) + (byE ? 0.5 : 0),
+        position: pos,
+      };
+    });
+  }
+
+  /* ═══════════════════════════════════════════════════════════════
+     PHOTO CAPTURE
+  ═══════════════════════════════════════════════════════════════ */
+  let photoImgEl = null;
+  // Reuse an offscreen canvas for photo capture
+  const captureCanvas = document.createElement('canvas');
+  const captureCtx = captureCanvas.getContext('2d');
+
+  function capturePhoto() {
+    if (video.readyState < 2) return;
+    captureCanvas.width = video.videoWidth;
+    captureCanvas.height = video.videoHeight;
+    captureCtx.drawImage(video, 0, 0);
+    photoDataURL = captureCanvas.toDataURL('image/jpeg', 0.85);
+
+    const preview = document.getElementById('photoPreview');
+    preview.style.backgroundImage = `url(${photoDataURL})`;
+    preview.classList.add('active');
+
+    // Cache Image element for detection
+    photoImgEl = new Image();
+    photoImgEl.src = photoDataURL;
+
+    // Hide live video
+    video.style.opacity = '0';
+
+    // Swap capture button to retake
+    const btn = document.getElementById('captureBtn');
+    btn.classList.add('retake');
+    btn.title = t('retake');
+
+    // Reset scan
+    if (staffData) {
+      scanX = staffData.staffLeft;
+      Object.keys(noteCooldowns).forEach(k => delete noteCooldowns[k]);
+    }
+  }
+
+  function retakePhoto() {
+    photoDataURL = null;
+    photoImgEl = null;
+    document.getElementById('photoPreview').classList.remove('active');
+    document.getElementById('photoPreview').style.backgroundImage = '';
+    video.style.opacity = '1';
+    document.getElementById('captureBtn').classList.remove('retake');
+  }
+
+  function onCapture() {
+    if (appMode === 'photo') {
+      if (photoDataURL) {
+        retakePhoto();
+      } else {
+        capturePhoto();
+      }
+    }
+  }
+
+  /* ═══════════════════════════════════════════════════════════════
+     PLAY / PAUSE
+  ═══════════════════════════════════════════════════════════════ */
+  function togglePlay() {
+    isPlaying = !isPlaying;
+    document.getElementById('iconPause').style.display = isPlaying ? '' : 'none';
+    document.getElementById('iconPlay').style.display  = isPlaying ? 'none' : '';
+    updatePlayBtnLabel();
+    document.getElementById('playBtn').classList.toggle('active', isPlaying);
+    if (!isPlaying) {
+      Object.values(instruments).forEach(s => s && s.releaseAll());
+    }
+  }
+
+  /* ═══════════════════════════════════════════════════════════════
+     MODE SWITCHING
+  ═══════════════════════════════════════════════════════════════ */
+  function switchMode() {
+    const newMode = appMode === 'photo' ? 'live' : 'photo';
+    applyMode(newMode);
+  }
+
+  function applyMode(mode) {
+    appMode = mode;
+    const badge = document.getElementById('modeBadge');
+
+    if (mode === 'photo') {
+      badge.textContent = t('photo-mode');
+      document.getElementById('captureBtn').style.display = '';
+      retakePhoto();
+    } else {
+      badge.textContent = t('live-mode');
+      document.getElementById('captureBtn').style.display = 'none';
+      retakePhoto();
+    }
+
+    // Reset detection cooldowns
+    Object.keys(noteCooldowns).forEach(k => delete noteCooldowns[k]);
+  }
+
+  function selectMode(mode) {
+    document.getElementById('modeSelect').classList.add('hidden');
+    document.getElementById('cameraView').classList.add('active');
+    document.getElementById('topBar').style.display = '';
+    document.getElementById('bottomToolbar').style.display = '';
+    applyMode(mode);
+    startCamera(cameraFacing);
+    resizeCanvas();
+    if (staffData) scanX = staffData.staffLeft;
+    startAnimationLoop();
+
+    // Show opencv status if not ready
+    if (!cvReady) {
+      const el = document.getElementById('opencvStatus');
+      el.style.display = '';
+      el.classList.remove('loaded');
+    }
+  }
+
+  /* ═══════════════════════════════════════════════════════════════
+     SETTINGS PANEL
+  ═══════════════════════════════════════════════════════════════ */
+  function openSettings() {
+    document.getElementById('settingsPanel').classList.add('open');
+    document.getElementById('settingsBackdrop').classList.add('open');
+  }
+
+  function closeSettings() {
+    document.getElementById('settingsPanel').classList.remove('open');
+    document.getElementById('settingsBackdrop').classList.remove('open');
+  }
+
+  /* ═══════════════════════════════════════════════════════════════
+     MAIN ANIMATION LOOP
+  ═══════════════════════════════════════════════════════════════ */
+  let lastDetectionTime = 0;
+  let lastDetectionResults = null;
+  const DETECTION_INTERVAL = 66; // ~15fps for detection
+
+  function animationLoop(now) {
+    requestAnimationFrame(animationLoop);
+
+    if (!staffData || !isPlaying) {
+      // Still render staff (without scan line movement)
+      if (staffData) {
+        ctx.clearRect(0, 0, staffData.displayWidth, staffData.displayHeight);
+        drawStaffLines(staffData);
+        drawTrebleClef(staffData);
+        // draw passive dots at scan position
+        staffData.positions.forEach(pos => drawNoteIndicator(scanX, pos.y, false, 0));
+      }
+      return;
+    }
+
+    // Advance scan
+    const curScanX = advanceScanLine();
+
+    // Detection (throttled)
+    if (now - lastDetectionTime > DETECTION_INTERVAL) {
+      lastDetectionTime = now;
+
+      // Only detect when we have a source
+      const hasSource = (appMode === 'photo' && photoDataURL) || (appMode === 'live' && video.readyState >= 2);
+      if (hasSource) {
+        lastDetectionResults = detectObjects();
+
+        // Trigger notes
+        if (lastDetectionResults && audioReady) {
+          lastDetectionResults.forEach((result, i) => {
+            if (result.detected) {
+              const noteId = `note_${i}`;
+              if (shouldTriggerNote(noteId, now)) {
+                const note = getNoteForPosition(i);
+                const vel = confidenceToVelocity(result.confidence);
+                playNote(note, vel);
+              }
+            }
+          });
+        }
+      }
+    }
+
+    renderStaff(curScanX, lastDetectionResults);
+  }
+
+  function startAnimationLoop() {
+    requestAnimationFrame(animationLoop);
+  }
+
+  /* ═══════════════════════════════════════════════════════════════
+     STARTUP
+  ═══════════════════════════════════════════════════════════════ */
+  async function onStart() {
+    await initAudio();
+    document.getElementById('splash').classList.add('hidden');
+    document.getElementById('modeSelect').classList.remove('hidden');
+  }
+
+  // ResizeObserver to handle orientation changes
+  const ro = new ResizeObserver(() => {
+    resizeCanvas();
+    if (staffData) scanX = Math.max(staffData.staffLeft, Math.min(scanX, staffData.staffRight));
+  });
+  ro.observe(document.getElementById('cameraView'));
+  </script>
+</body>
+</html>
