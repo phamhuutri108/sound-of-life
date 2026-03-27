@@ -19,20 +19,17 @@ import {
   renderStaff,
   setShowClef, setShowGrid,
   showClef, showGrid,
+  markBgDirty,
 } from './staff.js';
 import {
   cvReady,
   noteCooldowns, shouldTriggerNote,
   detectObjects as _detectObjects,
   loadOpenCVIfNeeded,
+  buildPhotoScanCache, clearPhotoScanCache,
 } from './detection.js';
 import {
-  loadSmartModel,
-  isSmartReady,
-  drawDetections,
-  getSmartBackend,
   setSmartProfile,
-  resetPhotoMask,
 } from './smartDetection.js';
 
 /* ═══════════════════════════════════════════════════════════════
@@ -70,7 +67,10 @@ function computePhotoBounds(imgEl) {
 function applyPhotoBounds() {
   const bounds = computePhotoBounds(photoImgEl);
   staffData = resizeCanvas(bounds);
-  if (staffData) scanX = staffData.staffLeft;
+  if (staffData) {
+    scanX = staffData.staffLeft;
+    buildPhotoScanCache(photoImgEl, staffData); // pre-scan once; per-column reads are instant
+  }
 }
 
 /* ═══════════════════════════════════════════════════════════════
@@ -126,6 +126,7 @@ function applyMode(mode) {
   document.getElementById('captureBtn').style.display = isPhoto ? '' : 'none';
   document.getElementById('galleryBtn').style.display = isPhoto ? '' : 'none';
   _revokeBlobPhoto();
+  clearPhotoScanCache();
   retakePhoto();
   photoDataURL = null;
   photoImgEl = null;
@@ -173,27 +174,11 @@ async function selectMode(mode) {
   applyMode(mode);
   const cameraStarted = await startCamera(_cameraFacing);
 
-  // Prioritize camera readiness first.
-  // 3 s delay lets RAF render a few frames and avoids WASM compile competing
-  // with the first animation frames on slow mobile devices.
-  if (cameraStarted) {
-    const modelDelay = mode === 'live' ? 3000 : 800;
-    setTimeout(() => loadSmartModel(), modelDelay);
-  }
-
+  // Prioritize camera readiness first — no more 3 s model load delay
   initCameraZoom();
   staffData = resizeCanvas();
   if (staffData) scanX = staffData.staffLeft;
   startAnimationLoop();
-
-  // OpenCV is only useful for photo-mode fallback — load it lazily.
-  if (mode === 'photo') {
-    const el = document.getElementById('opencvStatus');
-    el.style.display = '';
-    el.classList.remove('loaded');
-    loadOpenCVIfNeeded();
-    setTimeout(() => el.classList.add('loaded'), 5000);
-  }
 }
 
 /* ═══════════════════════════════════════════════════════════════
@@ -204,7 +189,6 @@ function capturePhoto() {
   if (result) {
     photoDataURL = result.photoDataURL;
     photoImgEl = result.photoImgEl;
-    resetPhotoMask(); // new photo — clear stale mask, trigger fresh MediaPipe pass
     // Show save button
     document.getElementById('saveBtn').style.display = '';
     // Wait for image to decode before computing bounds (may already be complete for data URLs)
@@ -272,7 +256,7 @@ function doRetakePhoto() {
   retakePhoto();
   photoDataURL = null;
   photoImgEl = null;
-  resetPhotoMask(); // returning to camera — clear cached mask
+  clearPhotoScanCache();
   document.getElementById('saveBtn').style.display = 'none';
   // Restore full-canvas staff (no letterbox)
   staffData = resizeCanvas();
@@ -287,7 +271,6 @@ function onImportPhoto() {
     onResult: (result) => {
       photoDataURL = result.photoDataURL;
       photoImgEl = result.photoImgEl;
-      resetPhotoMask(); // new photo — clear stale mask, trigger fresh MediaPipe pass
       document.getElementById('saveBtn').style.display = '';
       if (photoImgEl.complete && photoImgEl.naturalWidth) {
         applyPhotoBounds();
@@ -389,42 +372,32 @@ function applyPerformanceTuning(now) {
   }
 }
 
-function getDetectionInterval(activeBackend) {
-  if (activePerfProfile === 'ultra-smooth') {
-    return activeBackend === 'mediapipe'
-      ? BASE_DETECTION_INTERVAL + 90
-      : BASE_DETECTION_INTERVAL + 120;
-  }
-  if (activePerfProfile === 'responsive') {
-    return activeBackend === 'mediapipe'
-      ? Math.max(110, BASE_DETECTION_INTERVAL - 50)
-      : Math.max(140, BASE_DETECTION_INTERVAL - 25);
-  }
-
-  return activeBackend === 'mediapipe'
-    ? BASE_DETECTION_INTERVAL
-    : BASE_DETECTION_INTERVAL + 40;
+function getDetectionInterval() {
+  if (activePerfProfile === 'ultra-smooth') return BASE_DETECTION_INTERVAL + 120;
+  if (activePerfProfile === 'responsive')   return Math.max(140, BASE_DETECTION_INTERVAL - 25);
+  return BASE_DETECTION_INTERVAL + 40;
 }
+
+let _renderTick = 0;
 
 function animationLoop(now) {
   requestAnimationFrame(animationLoop);
   updateFpsEstimate(now);
   applyPerformanceTuning(now);
+  _renderTick++;
+  const shouldRender = (_renderTick & 1) === 0; // canvas at ~30 fps; detection/audio stay at full rate
 
   if (!staffData || !isPlaying) {
-    // Still render staff (without scan line movement), respecting showClef/showGrid flags
-    if (staffData) {
-      renderStaff(scanX, null, staffData, false);
-    }
+    // Only repaint when it's a render tick — staff is static when paused
+    if (staffData && shouldRender) renderStaff(scanX, null, staffData, false);
     return;
   }
 
-  // Advance scan
+  // Scan line advances at full 60 fps so speed is constant regardless of render rate
   const curScanX = advanceScanLine();
 
   // Detection (throttled)
-  const activeBackend = getSmartBackend();
-  const activeInterval = getDetectionInterval(activeBackend);
+  const activeInterval = getDetectionInterval();
   if (now - lastDetectionTime > activeInterval) {
     lastDetectionTime = now;
 
@@ -441,9 +414,9 @@ function animationLoop(now) {
         sensitivity,
       });
 
-      // Trigger notes from edge transitions
+      // Trigger notes from detection results
       if (lastDetectionResults && isAudioReady()) {
-        // Keep only strongest edge per pitch lane to avoid jitter retriggering.
+        // Keep only strongest detection per pitch lane
         const strongestByNote = new Map();
         for (const result of lastDetectionResults) {
           if (!result.detected) continue;
@@ -471,8 +444,9 @@ function animationLoop(now) {
     }
   }
 
-  renderStaff(curScanX, lastDetectionResults, staffData, isPlaying);
-  if (isSmartReady()) drawDetections(ctx, staffData);
+  if (shouldRender) {
+    renderStaff(curScanX, lastDetectionResults, staffData, isPlaying);
+  }
 }
 
 let loopStarted = false;
@@ -872,8 +846,8 @@ function wireUI() {
   });
 
   // Overlay toggles
-  document.getElementById('toggleClef').addEventListener('change', e => setShowClef(e.target.checked));
-  document.getElementById('toggleGrid').addEventListener('change', e => setShowGrid(e.target.checked));
+  document.getElementById('toggleClef').addEventListener('change', e => { setShowClef(e.target.checked); markBgDirty(); });
+  document.getElementById('toggleGrid').addEventListener('change', e => { setShowGrid(e.target.checked); markBgDirty(); });
 
   // Camera facing buttons in settings
   document.getElementById('btn-cam-front').addEventListener('click', () => setCameraFacing('user'));

@@ -58,72 +58,63 @@ export function calculateStaffPositions(canvasW, canvasH, bounds) {
   };
 }
 
-export function drawStaffLines(sd) {
-  ctx.strokeStyle = 'rgba(255, 255, 255, 0.55)';
-  ctx.lineWidth = 1.5;
-  ctx.setLineDash([]);
+export function drawStaffLines(sd, c = ctx) {
+  c.strokeStyle = 'rgba(255, 255, 255, 0.55)';
+  c.lineWidth = 1.5;
+  c.setLineDash([]);
   sd.positions.forEach(pos => {
     if (pos.isLine) {
-      ctx.beginPath();
-      ctx.moveTo(sd.staffLeft, pos.y);
-      ctx.lineTo(sd.staffRight, pos.y);
-      ctx.stroke();
+      c.beginPath();
+      c.moveTo(sd.staffLeft, pos.y);
+      c.lineTo(sd.staffRight, pos.y);
+      c.stroke();
     }
     if (pos.isLedger) {
       const cx  = sd.displayWidth / 2;
       const hw  = sd.spacing * 2;
-      ctx.strokeStyle = 'rgba(255,255,255,0.3)';
-      ctx.setLineDash([4, 3]);
-      ctx.beginPath();
-      ctx.moveTo(cx - hw, pos.y);
-      ctx.lineTo(cx + hw, pos.y);
-      ctx.stroke();
-      ctx.setLineDash([]);
-      ctx.strokeStyle = 'rgba(255, 255, 255, 0.55)';
+      c.strokeStyle = 'rgba(255,255,255,0.3)';
+      c.setLineDash([4, 3]);
+      c.beginPath();
+      c.moveTo(cx - hw, pos.y);
+      c.lineTo(cx + hw, pos.y);
+      c.stroke();
+      c.setLineDash([]);
+      c.strokeStyle = 'rgba(255, 255, 255, 0.55)';
     }
   });
 }
 
-export function drawTrebleClef(sd) {
+export function drawTrebleClef(sd, c = ctx) {
   const clefX = sd.staffLeft - 4;
   const clefY = (sd.staffTop + sd.staffBottom) / 2;
   const clefSize = (sd.staffBottom - sd.staffTop) * 1.0;
-  ctx.fillStyle = 'rgba(255, 255, 255, 0.78)';
-  ctx.font = `${clefSize}px serif`;
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillText('\u{1D11E}', clefX, clefY);
+  c.fillStyle = 'rgba(255, 255, 255, 0.78)';
+  c.font = `${clefSize}px serif`;
+  c.textAlign = 'center';
+  c.textBaseline = 'middle';
+  c.fillText('\u{1D11E}', clefX, clefY);
 }
 
 export function drawScanLine(scanX, sd) {
-  const g = ctx.createLinearGradient(scanX - 7, 0, scanX + 7, 0);
-  g.addColorStop(0,   'rgba(170,230,130,0)');
-  g.addColorStop(0.3, 'rgba(170,230,130,0.38)');
-  g.addColorStop(0.5, 'rgba(190,245,150,0.88)');
-  g.addColorStop(0.7, 'rgba(170,230,130,0.38)');
-  g.addColorStop(1,   'rgba(170,230,130,0)');
-  ctx.fillStyle = g;
+  // 3 fillRects instead of createLinearGradient — much cheaper on mobile GPU
+  ctx.fillStyle = 'rgba(170,230,130,0.15)';
   ctx.fillRect(scanX - 7, 0, 14, sd.displayHeight);
+  ctx.fillStyle = 'rgba(185,240,140,0.50)';
+  ctx.fillRect(scanX - 3, 0, 6, sd.displayHeight);
+  ctx.fillStyle = 'rgba(190,245,150,0.88)';
+  ctx.fillRect(scanX - 1, 0, 2, sd.displayHeight);
 }
 
-export function drawNoteIndicator(x, y, active, confidence = 1) {
-  if (!active) {
-    ctx.fillStyle = 'rgba(185,220,165,0.14)';
-    ctx.beginPath();
-    ctx.arc(x, y, 3.5, 0, Math.PI * 2);
-    ctx.fill();
-    return;
-  }
+// Only called for ACTIVE notes; passive dots are batched in renderStaff
+function drawNoteIndicator(x, y, confidence = 1) {
   const alpha = 0.5 + confidence * 0.5;
-  const glow = ctx.createRadialGradient(x, y, 0, x, y, 24);
-  glow.addColorStop(0,   `rgba(120,176,74,${alpha})`);
-  glow.addColorStop(0.5, `rgba(120,176,74,${alpha * 0.35})`);
-  glow.addColorStop(1,   'rgba(120,176,74,0)');
-  ctx.fillStyle = glow;
+  // Outer glow — plain circle, no RadialGradient (expensive on mobile)
+  ctx.fillStyle = `rgba(120,176,74,${(alpha * 0.28).toFixed(2)})`;
   ctx.beginPath();
-  ctx.arc(x, y, 24, 0, Math.PI * 2);
+  ctx.arc(x, y, 22, 0, Math.PI * 2);
   ctx.fill();
-  ctx.fillStyle = `rgba(210,248,185,${alpha})`;
+  // Note head ellipse
+  ctx.fillStyle = `rgba(210,248,185,${alpha.toFixed(2)})`;
   ctx.beginPath();
   ctx.ellipse(x, y, 8, 6, -0.3, 0, Math.PI * 2);
   ctx.fill();
@@ -153,35 +144,58 @@ export function drawGrid(sd) {
   }
 }
 
+// ─── Static background cache ──────────────────────────────────────────────
+// Staff lines + clef never change between frames — render once per config,
+// then blit with a single ctx.drawImage() (one GPU copy, near zero cost).
+let _bgCanvas = null;
+let _bgKey = '';
+
+function _ensureBg(sd) {
+  const dpr = window.devicePixelRatio || 1;
+  const key = `${canvas.width}|${canvas.height}|${+showGrid}|${+showClef}|${sd.staffTop.toFixed(0)}|${sd.staffBottom.toFixed(0)}`;
+  if (_bgKey === key && _bgCanvas) return _bgCanvas;
+  if (!_bgCanvas) _bgCanvas = document.createElement('canvas');
+  _bgCanvas.width  = canvas.width;
+  _bgCanvas.height = canvas.height;
+  const bc = _bgCanvas.getContext('2d');
+  bc.setTransform(dpr, 0, 0, dpr, 0, 0);
+  bc.clearRect(0, 0, sd.displayWidth, sd.displayHeight);
+  if (showGrid) drawStaffLines(sd, bc);
+  if (showClef) drawTrebleClef(sd, bc);
+  _bgKey = key;
+  return _bgCanvas;
+}
+
+/** Call when showGrid / showClef toggle so background is redrawn next frame. */
+export function markBgDirty() { _bgKey = ''; }
+
 export function renderStaff(scanX, detectionResults, staffData, isPlaying) {
   if (!staffData) return;
   const sd = staffData;
   ctx.clearRect(0, 0, sd.displayWidth, sd.displayHeight);
 
-  // Staff lines are still drawn as a visual guide
-  if (showGrid) drawStaffLines(sd);
-  if (showClef) drawTrebleClef(sd);
+  // Blit cached static background (one GPU drawImage — essentially free)
+  ctx.drawImage(_ensureBg(sd), 0, 0);
 
   if (isPlaying && scanX >= sd.staffLeft && scanX <= sd.staffRight) {
     drawScanLine(scanX, sd);
   }
 
-  if (detectionResults) {
-    // Draw passive dots at the 13 fixed staff positions
-    sd.positions.forEach(pos => {
-      drawNoteIndicator(scanX, pos.y, false, 0);
-    });
+  // All 13 passive dots in one batched path → single fill() call
+  ctx.fillStyle = 'rgba(185,220,165,0.14)';
+  ctx.beginPath();
+  for (const pos of sd.positions) {
+    ctx.moveTo(scanX + 3.5, pos.y);
+    ctx.arc(scanX, pos.y, 3.5, 0, Math.PI * 2);
+  }
+  ctx.fill();
 
-    // Draw ACTIVE notes at the actual Y position of the transitions
+  // Active note indicators
+  if (detectionResults) {
     for (const r of detectionResults) {
       if (r.detected && r.y !== undefined) {
-        drawNoteIndicator(scanX, r.y, true, r.confidence);
+        drawNoteIndicator(scanX, r.y, r.confidence);
       }
     }
-  } else {
-    // If no results, just draw all passive indicators
-    sd.positions.forEach(pos => {
-      drawNoteIndicator(scanX, pos.y, false, 0);
-    });
   }
 }
