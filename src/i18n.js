@@ -32,6 +32,7 @@ export const I18N = {
     'switch': 'Mode',
     'capture': 'Capture',
     'retake': 'Retake',
+    'gallery': 'Gallery',
   },
   vi: {
     'app-title': 'Âm Thanh Cuộc Sống',
@@ -66,6 +67,7 @@ export const I18N = {
     'switch': 'Chế độ',
     'capture': 'Chụp',
     'retake': 'Chụp lại',
+    'gallery': 'Thư viện',
   },
 };
 

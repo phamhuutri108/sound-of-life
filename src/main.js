@@ -10,7 +10,7 @@ import {
 } from './audio.js';
 import {
   startCamera, flipCamera as _flipCamera, setCameraFacing as _setCameraFacing,
-  capturePhoto as _capturePhoto, retakePhoto,
+  capturePhoto as _capturePhoto, retakePhoto, importPhoto as _importPhoto,
   cameraFacing as _cameraFacing,
 } from './camera.js';
 import {
@@ -84,19 +84,13 @@ function applyMode(mode) {
   appMode = mode;
   const badge = document.getElementById('modeBadge');
 
-  if (mode === 'photo') {
-    badge.textContent = t('photo-mode');
-    document.getElementById('captureBtn').style.display = '';
-    retakePhoto();
-    photoDataURL = null;
-    photoImgEl = null;
-  } else {
-    badge.textContent = t('live-mode');
-    document.getElementById('captureBtn').style.display = 'none';
-    retakePhoto();
-    photoDataURL = null;
-    photoImgEl = null;
-  }
+  const isPhoto = mode === 'photo';
+  badge.textContent = t(isPhoto ? 'photo-mode' : 'live-mode');
+  document.getElementById('captureBtn').style.display = isPhoto ? '' : 'none';
+  document.getElementById('galleryBtn').style.display = isPhoto ? '' : 'none';
+  retakePhoto();
+  photoDataURL = null;
+  photoImgEl = null;
 
   // Reset detection cooldowns
   Object.keys(noteCooldowns).forEach(k => delete noteCooldowns[k]);
@@ -122,12 +116,14 @@ function goHome() {
   document.getElementById('zoomControls').style.display = 'none';
   document.getElementById('cameraView').classList.remove('active');
 
-  // Show mode selection
-  document.getElementById('modeSelect').classList.remove('hidden');
+  // Show splash (home with mode cards)
+  document.getElementById('splash').classList.remove('hidden');
 }
 
 function selectMode(mode) {
-  document.getElementById('modeSelect').classList.add('hidden');
+  initAudio(); // sync within user gesture — do NOT await
+  loadSmartModel(); // fire-and-forget; detection falls back until ready
+  document.getElementById('splash').classList.add('hidden');
   document.getElementById('cameraView').classList.add('active');
   document.getElementById('topBar').style.display = '';
   document.getElementById('bottomToolbar').style.display = '';
@@ -163,6 +159,19 @@ function doRetakePhoto() {
   retakePhoto();
   photoDataURL = null;
   photoImgEl = null;
+}
+
+function onImportPhoto() {
+  _importPhoto({
+    staffData,
+    noteCooldowns,
+    t,
+    onResult: (result) => {
+      photoDataURL = result.photoDataURL;
+      photoImgEl = result.photoImgEl;
+      if (staffData) scanX = staffData.staffLeft;
+    },
+  });
 }
 
 function onCapture() {
@@ -261,18 +270,6 @@ function startAnimationLoop() {
   if (loopStarted) return;
   loopStarted = true;
   requestAnimationFrame(animationLoop);
-}
-
-/* ═══════════════════════════════════════════════════════════════
-   STARTUP
-═══════════════════════════════════════════════════════════════ */
-function onStart() {
-  initAudio(); // sync within gesture — do NOT await
-  loadSmartModel(); // fire-and-forget; detection falls back until ready
-  document.getElementById('splash').classList.add('hidden');
-  setTimeout(() => {
-    document.getElementById('modeSelect').classList.remove('hidden');
-  }, 350);
 }
 
 
@@ -399,8 +396,7 @@ function getPinchDist(e) {
    DOM WIRING — run after DOM is ready
 ═══════════════════════════════════════════════════════════════ */
 function wireUI() {
-  // Splash
-  document.getElementById('startBtn').addEventListener('click', onStart);
+  // Splash lang buttons
   document.getElementById('langEN').addEventListener('click', () => setLanguage('en', { isPlaying }));
   document.getElementById('langVI').addEventListener('click', () => setLanguage('vi', { isPlaying }));
 
@@ -415,6 +411,7 @@ function wireUI() {
 
   // Bottom toolbar
   document.getElementById('captureBtn').addEventListener('click', onCapture);
+  document.getElementById('galleryBtn').addEventListener('click', onImportPhoto);
   document.getElementById('playBtn').addEventListener('click', togglePlay);
   document.getElementById('switchBtn').addEventListener('click', switchMode);
 

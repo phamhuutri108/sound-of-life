@@ -92,3 +92,40 @@ export function retakePhoto() {
   video.style.opacity = '1';
   document.getElementById('captureBtn').classList.remove('retake');
 }
+
+export function importPhoto({ staffData, noteCooldowns, t, onResult }) {
+  const input = document.getElementById('photoImport');
+  input.onchange = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const photoDataURL = ev.target.result;
+      const preview = document.getElementById('photoPreview');
+      preview.style.backgroundImage = `url(${photoDataURL})`;
+      preview.classList.add('active');
+
+      const photoImgEl = new Image();
+      photoImgEl.src = photoDataURL;
+
+      // Hide live video
+      document.getElementById('cameraVideo').style.opacity = '0';
+
+      // Swap capture button to retake
+      const btn = document.getElementById('captureBtn');
+      btn.classList.add('retake');
+      if (t) btn.title = t('retake');
+
+      // Reset scan cooldowns
+      if (staffData) {
+        Object.keys(noteCooldowns).forEach(k => delete noteCooldowns[k]);
+      }
+
+      if (onResult) onResult({ photoDataURL, photoImgEl });
+    };
+    reader.readAsDataURL(file);
+    // Reset input so same file can be re-selected
+    input.value = '';
+  };
+  input.click();
+}
