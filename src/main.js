@@ -397,78 +397,109 @@ function renderZoomDial() {
   dc.scale(dpr, dpr);
   dc.clearRect(0, 0, W, H);
 
-  // Circle center sits below canvas so only the top arc shows
+  // Dark gradient background (like iPhone camera dial)
+  const bg = dc.createLinearGradient(0, 0, 0, H);
+  bg.addColorStop(0,   'rgba(0,0,0,0)');
+  bg.addColorStop(0.25,'rgba(0,0,0,0.72)');
+  bg.addColorStop(1,   'rgba(0,0,0,0.88)');
+  dc.fillStyle = bg;
+  dc.fillRect(0, 0, W, H);
+
+  // Arc geometry — large circle, center below canvas so only top arc visible
   const cx = W / 2;
-  const cy = H + 40;
-  const R  = Math.min(W * 0.94, 440);
+  const cy = H + 55;
+  const R  = Math.min(W * 0.92, 420);
+
+  // Which presets are available given zoomMax?
+  const presets = [1, 2, 3].filter(z => z <= zoomMax + 0.5);
 
   const logMin = Math.log(ZOOM_MIN);
-  const logMax = Math.log(Math.max(zoomMax, 5));
+  const logMax = Math.log(Math.max(zoomMax, presets[presets.length - 1]));
   const logCur = Math.log(Math.max(ZOOM_MIN, currentZoom));
-  const HALF_ARC = Math.PI * 0.68; // ±123° visible arc
+  const HALF_ARC = Math.PI * 0.72; // ±130° = 260° total arc
 
-  // angle for any log-zoom relative to current (current = top = -π/2)
   const logToAngle = (lz) =>
     -Math.PI / 2 + ((lz - logCur) / (logMax - logMin)) * HALF_ARC * 2;
 
-  // Faint background arc track
+  // Arc track ring
+  const aStart = logToAngle(logMin);
+  const aEnd   = logToAngle(logMax);
   dc.beginPath();
-  dc.arc(cx, cy, R, logToAngle(logMin), logToAngle(logMax));
-  dc.strokeStyle = 'rgba(255,255,255,0.10)';
-  dc.lineWidth = 1;
+  dc.arc(cx, cy, R, aStart, aEnd);
+  dc.strokeStyle = 'rgba(255,255,255,0.14)';
+  dc.lineWidth = 1.5;
   dc.stroke();
 
-  // Tick marks — fine every 0.1, major at .5 / 1 / 1.5 / 2 / 3 / 4 / 5 / 6 / 8
-  const MAJOR_SET = new Set([0.5, 1, 1.5, 2, 3, 4, 5, 6, 8]);
-  const step = 0.1;
-  for (let z = ZOOM_MIN; z <= zoomMax + 0.01; z = Math.round((z + step) * 10) / 10) {
-    const logZ  = Math.log(z);
-    const angle = logToAngle(logZ);
+  // Fine tick marks between presets
+  const FINE_STEP = 0.1;
+  for (let z = ZOOM_MIN; z <= zoomMax + 0.01; z = Math.round((z + FINE_STEP) * 10) / 10) {
+    const lz    = Math.log(Math.max(0.01, z));
+    const angle = logToAngle(lz);
     if (Math.abs(angle + Math.PI / 2) > HALF_ARC + 0.05) continue;
 
-    const isMajor  = MAJOR_SET.has(Math.round(z * 10) / 10);
-    const isCur    = Math.abs(z - currentZoom) < 0.07;
-    const tickLen  = isMajor ? 18 : 9;
-    const x1 = cx + R * Math.cos(angle);
-    const y1 = cy + R * Math.sin(angle);
-    const x2 = cx + (R - tickLen) * Math.cos(angle);
-    const y2 = cy + (R - tickLen) * Math.sin(angle);
+    // Skip the zone right around each preset node (they'll draw their own lines)
+    const nearPreset = presets.some(p => Math.abs(z - p) < 0.18);
+    if (nearPreset) continue;
+
+    const isHalf = Math.abs((z * 2) % 1) < 0.01; // 0.5 steps
+    const len    = isHalf ? 12 : 6;
+    const ox = cx + R * Math.cos(angle);
+    const oy = cy + R * Math.sin(angle);
+    const ix = cx + (R - len) * Math.cos(angle);
+    const iy = cy + (R - len) * Math.sin(angle);
 
     dc.beginPath();
-    dc.moveTo(x1, y1);
-    dc.lineTo(x2, y2);
-    dc.strokeStyle = isCur
-      ? '#ffd600'
-      : isMajor
-        ? 'rgba(255,255,255,0.75)'
-        : 'rgba(255,255,255,0.28)';
-    dc.lineWidth = isMajor ? 1.8 : 1;
+    dc.moveTo(ox, oy);
+    dc.lineTo(ix, iy);
+    dc.strokeStyle = isHalf ? 'rgba(255,255,255,0.45)' : 'rgba(255,255,255,0.22)';
+    dc.lineWidth   = 1;
     dc.stroke();
-
-    // Label major ticks (except current — shown by big text above)
-    if (isMajor && !isCur) {
-      const lx = cx + (R - 34) * Math.cos(angle);
-      const ly = cy + (R - 34) * Math.sin(angle);
-      dc.font = '400 11px Montserrat, sans-serif';
-      dc.fillStyle = 'rgba(255,255,255,0.55)';
-      dc.textAlign = 'center';
-      dc.textBaseline = 'middle';
-      dc.fillText(z + '×', lx, ly);
-    }
   }
 
-  // Fixed ▼ pointer at top center
-  const px = cx;
-  const py = cy - R + 2;
+  // Preset nodes — circular buttons on the arc
+  const NODE_R = 22; // radius of the circle node
+  presets.forEach(z => {
+    const lz    = Math.log(z);
+    const angle = logToAngle(lz);
+    if (Math.abs(angle + Math.PI / 2) > HALF_ARC + 0.15) return;
+
+    const nx = cx + R * Math.cos(angle);
+    const ny = cy + R * Math.sin(angle);
+    const isActive = Math.abs(z - currentZoom) < 0.08;
+
+    // Node circle
+    dc.beginPath();
+    dc.arc(nx, ny, NODE_R, 0, Math.PI * 2);
+    dc.fillStyle = isActive
+      ? 'rgba(255, 214, 0, 0.25)'
+      : 'rgba(255, 255, 255, 0.10)';
+    dc.fill();
+    dc.strokeStyle = isActive
+      ? 'rgba(255, 214, 0, 0.85)'
+      : 'rgba(255, 255, 255, 0.40)';
+    dc.lineWidth = 1.5;
+    dc.stroke();
+
+    // Zoom label inside node
+    dc.font = `${isActive ? '700' : '500'} 13px Montserrat, sans-serif`;
+    dc.fillStyle = isActive ? '#ffd600' : 'rgba(255,255,255,0.80)';
+    dc.textAlign = 'center';
+    dc.textBaseline = 'middle';
+    dc.fillText(z + '×', nx, ny);
+  });
+
+  // Fixed ▼ pointer at top center (always points to current zoom)
+  const topX = cx;
+  const topY = cy - R - 2;
   dc.beginPath();
-  dc.moveTo(px, py + 12);
-  dc.lineTo(px - 7, py + 1);
-  dc.lineTo(px + 7, py + 1);
+  dc.moveTo(topX,     topY + 14);
+  dc.lineTo(topX - 8, topY + 2);
+  dc.lineTo(topX + 8, topY + 2);
   dc.closePath();
   dc.fillStyle = '#ffd600';
   dc.fill();
 
-  // Value label
+  // Current zoom value label (large, above pointer)
   document.getElementById('zoomDialValue').textContent = currentZoom.toFixed(1) + '×';
 }
 
