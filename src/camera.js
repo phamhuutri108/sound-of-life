@@ -26,8 +26,8 @@ function buildCameraAttempts(facing) {
     {
       video: {
         facingMode: { ideal: facing },
-        width: { ideal: 960 },
-        height: { ideal: 540 },
+        width: { ideal: 640 },
+        height: { ideal: 480 },
         frameRate: { ideal: 24, max: 30 },
       },
       audio: false,
@@ -35,8 +35,8 @@ function buildCameraAttempts(facing) {
     {
       video: {
         facingMode: facing,
-        width: { ideal: 1280 },
-        height: { ideal: 720 },
+        width: { ideal: 960 },
+        height: { ideal: 540 },
       },
       audio: false,
     },

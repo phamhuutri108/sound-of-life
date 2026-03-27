@@ -321,6 +321,8 @@ function setCameraFacing(facing) {
 let lastDetectionTime = 0;
 let lastDetectionResults = null;
 let lastAnyNoteTime = 0;
+let _liveVideoEl = null;       // cached once — avoids getElementById in hot loop
+let _lastDetectedVideoTime = -1; // skip detection if video frame hasn't changed
 let lastFrameTime = 0;
 let fpsEma = 60;
 let lastPerfTuneTime = 0;
@@ -402,7 +404,15 @@ function animationLoop(now) {
     lastDetectionTime = now;
 
     // Only detect when we have a source
-    const video = document.getElementById('cameraVideo');
+    if (!_liveVideoEl) _liveVideoEl = document.getElementById('cameraVideo');
+    const video = _liveVideoEl;
+    // In live mode, skip detection if the camera hasn't produced a new frame yet
+    // (prevents redundant getImageData on the same stale frame)
+    if (appMode === 'live' && video.readyState >= 2) {
+      const vt = video.currentTime;
+      if (vt === _lastDetectedVideoTime) { lastDetectionTime = now - activeInterval + 16; return; }
+      _lastDetectedVideoTime = vt;
+    }
     const hasSource = (appMode === 'photo' && photoDataURL) || (appMode === 'live' && video.readyState >= 2);
     if (hasSource) {
       lastDetectionResults = _detectObjects({
