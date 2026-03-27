@@ -1,188 +1,390 @@
-# Implement MediaPipe Image Segmentation to replace COCO-SSD
+# Thay thế hệ thống phát hiện nốt nhạc: MediaPipe Segmentation + Edge-triggered Notes
 
-## Mục tiêu
+## Tổng quan
 
-Thay thế COCO-SSD (bounding box thô, chỉ 80 class) bằng **MediaPipe Image Segmentation** để nhận được **pixel-level foreground mask**. Scan line sẽ query trực tiếp trên mask thay vì check điểm có nằm trong box không.
+Viết lại hoàn toàn hệ thống quét nốt nhạc. Hệ thống hiện tại sai ở mức kiến trúc:
+- Nó check "có vật thể ở 13 vị trí CỐ ĐỊNH trên khuông nhạc không?" → sai
+- Đúng phải là: "scan line CHẠM VÀO RÌA vật thể ở ĐÂU?" → nốt nhạc trigger tại đó
 
-## Tại sao cần làm
+## Video reference (cần hiểu trước khi code)
 
-Hệ thống hiện tại (`src/smartDetection.js`) dùng COCO-SSD trả về bounding box. `getSmartResults()` chỉ hỏi "điểm (x,y) có nằm trong box không?" — phần lớn diện tích box là không khí, gây trigger nhạc ở chỗ trống. Ngoài ra COCO-SSD chỉ nhận 80 class, bỏ qua rất nhiều vật thể thực tế.
+App lấy cảm hứng từ tác phẩm "일상 속 풍경을 음악으로 듣는다면" — scan line quét từ trái sang phải:
+- Chim đậu trên dây điện → mỗi chú chim là một nốt, vị trí Y = cao độ
+- Hạt lúa trên thân cây → mật độ dày = giai điệu nhanh
+- Đường viền gạch ngoằn ngoèo → pitch trượt lên xuống theo hình dạng
+- Lon rác vứt ngổn ngang → nhịp ngẫu hứng, dồn dập
+- Ánh đèn thành phố ban đêm → ambient thưa thớt
 
-MediaPipe Image Segmentation trả về mask 0.0–1.0 cho từng pixel, phân biệt foreground/background chính xác ở mức pixel.
+**Quy tắc cốt lõi:**
+1. Nốt nhạc CHỈ trigger khi scan line chạm BIÊN/RÌA vật thể (transition background→foreground), KHÔNG phải suốt khi đi qua bên trong
+2. Vị trí Y thực tế của rìa vật thể quyết định CAO ĐỘ nốt — cao = nốt cao, thấp = nốt trầm
+3. Mật độ vật thể trên đường quét quyết định NHỊP ĐIỆU
+4. Độ tương phản/sharpness của rìa vật thể quyết định VELOCITY (mạnh/nhẹ)
 
-## Kiến trúc hiện tại cần hiểu
+## Kiến trúc hiện tại (cần hiểu để biết phải sửa gì)
 
-Đọc kỹ các file này trước khi thay đổi:
+### Flow hiện tại (SAI):
+```
+13 vị trí Y cố định (staff positions)
+  → Tại mỗi vị trí: "có vật thể không?" (COCO-SSD box hoặc brightness)
+  → Nếu có: playNote(SCALES[index])
+```
 
-- `src/smartDetection.js` — module cần thay thế hoàn toàn, giữ nguyên API
-- `src/detection.js` — consumer: gọi `isSmartReady()`, `runInference()`, `getSmartResults()`, `loadSmartModel()`
-- `src/main.js` — gọi `loadSmartModel()` khi khởi động
+Vấn đề: một vật thể lớn trigger TẤT CẢ các vị trí nó bao phủ liên tục. Không có nhịp điệu, không có phân biệt rìa vs bên trong.
 
-**API hiện tại phải giữ nguyên** (để `detection.js` không cần sửa):
+### Flow mới (ĐÚNG):
+```
+Tại scanX, lấy CỘT pixel từ segmentation mask
+  → Tìm tất cả TRANSITIONS (0→1, nền→vật) trong cột đó
+  → Mỗi transition tại Y:
+      - Map Y → nốt nhạc (Y càng cao trên màn hình → nốt càng cao)
+      - Trigger nốt đó với velocity từ sharpness của transition
+  → KHÔNG trigger khi ở bên trong vật thể (transition đã xảy ra rồi)
+```
+
+## Các file cần thay đổi
+
+### File 1: `src/smartDetection.js` — VIẾT LẠI HOÀN TOÀN
+
+Thay COCO-SSD bằng MediaPipe Image Segmentation.
+
+**Cài package:**
+```bash
+npm install @mediapipe/tasks-vision
+```
+
+**API exports phải giữ nguyên tên** (nhưng thay đổi behavior):
 ```js
 export function isSmartReady(): boolean
 export function isSmartLoading(): boolean
 export async function loadSmartModel(): Promise<void>
 export async function runInference(imageSource): Promise<void>
-export function getSmartResults(staffData, scanX): Array<{detected, confidence, position}> | null
 export function drawDetections(ctx, staffData): void
 ```
 
-## Implement
-
-### Bước 1 — Cài package
-
-```bash
-npm install @mediapipe/tasks-vision
+**XÓA** `getSmartResults()` — thay bằng API mới:
+```js
+export function getEdgeTransitions(staffData, scanX): Array<{y, confidence}> | null
 ```
 
-Kiểm tra xem `@mediapipe/tasks-vision` đã có trong `package.json` chưa. Nếu có rồi thì bỏ qua.
-
-### Bước 2 — Viết lại `src/smartDetection.js`
-
-Thay toàn bộ nội dung file. Logic chính:
-
-**Load model:**
+**Pseudocode:**
 ```js
 import { ImageSegmenter, FilesetResolver } from '@mediapipe/tasks-vision';
 
-// Model nhẹ nhất: selfie_multiclass_256x256 (~3.5 MB) hoặc hair_segmentation (~1.7 MB)
-// Dùng selfie_multiclass vì phân biệt foreground tốt hơn cho nhiều loại vật thể
-// Nếu muốn hoàn toàn general thì dùng deeplab_v3 (~3 MB) với CATEGORY_MASK
-const MODEL_URL = 'https://storage.googleapis.com/mediapipe-models/image_segmenter/selfie_multiclass_256x256/float32/1/selfie_multiclass_256x256.tflite';
-```
+let segmenter = null;
+let loading = false;
 
-**Quan trọng — chọn model đúng:**
-- `selfie_multiclass_256x256`: phân biệt người/tóc/quần áo/background — tốt khi camera hướng vào người
-- `deeplab_v3`: general segmentation 21 class (người, xe, cây, đồ vật...) — tốt hơn cho outdoor/objects
-- Nên dùng **deeplab_v3** vì app này dùng ngoài trời, không chỉ selfie
+// Cache mask mỗi frame
+let cachedMask = null;     // Float32Array 0.0–1.0
+let maskW = 0, maskH = 0;
+const INFERENCE_INTERVAL = 150; // ms
 
-Tìm đúng URL model từ MediaPipe documentation hoặc dùng CDN: `https://storage.googleapis.com/mediapipe-models/image_segmenter/`
+export async function loadSmartModel() {
+  if (segmenter || loading) return;
+  loading = true;
+  try {
+    const vision = await FilesetResolver.forVisionTasks(
+      'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision/wasm'
+    );
+    // deeplab_v3: general 21-class segmentation — tốt cho outdoor
+    // Tìm đúng URL từ https://ai.google.dev/edge/mediapipe/solutions/vision/image_segmenter
+    // Hoặc dùng selfie_multiclass nếu deeplab URL không available
+    segmenter = await ImageSegmenter.createFromOptions(vision, {
+      baseOptions: {
+        modelAssetPath: 'MODEL_URL_HERE', // PHẢI verify URL đúng
+        delegate: 'GPU',
+      },
+      runningMode: 'VIDEO',
+      outputCategoryMask: false,
+      outputConfidenceMasks: true,
+    });
+  } catch (e) {
+    console.warn('MediaPipe segmentation load failed:', e);
+  } finally {
+    loading = false;
+  }
+}
 
-**Cache mask:**
-```js
-// Mask là Float32Array hoặc Uint8ClampedArray, width × height
-let cachedMask = null;       // confidence mask (Float32Array, giá trị 0.0–1.0)
-let cachedMaskWidth = 0;
-let cachedMaskHeight = 0;
-const INFERENCE_INTERVAL = 150; // ms — nhanh hơn COCO-SSD vì model nhẹ hơn
-```
+export async function runInference(imageSource) {
+  if (!segmenter) return;
+  // Throttle
+  const now = Date.now();
+  if (now - lastTime < INFERENCE_INTERVAL) return;
+  lastTime = now;
 
-**runInference — dùng CATEGORY_MASK hoặc CONFIDENCE_MASK:**
-```js
-// Ưu tiên CONFIDENCE_MASK để có giá trị 0.0–1.0 làm confidence nốt nhạc
-const result = segmenter.segmentForVideo(imageSource, timestamp);
-// hoặc segmenter.segment(imageSource) nếu là ảnh tĩnh (photo mode)
-const confidenceMasks = result.confidenceMasks; // mảng masks theo class
-// Với deeplab, lấy mask của class "background" (index 0) rồi invert
-// foreground = 1 - background_mask[pixel]
-```
+  try {
+    const isVideo = imageSource instanceof HTMLVideoElement;
+    // Nếu video chưa ready thì skip
+    if (isVideo && imageSource.readyState < 2) return;
 
-**getSmartResults — query mask tại vị trí nốt:**
-```js
-export function getSmartResults(staffData, scanX) {
-  if (!cachedMask || cachedMask.length === 0) return null;
+    const result = isVideo
+      ? segmenter.segmentForVideo(imageSource, now)
+      : segmenter.segment(imageSource);
+
+    // Lấy confidence mask — mảng masks theo class
+    // Index 0 thường là background. Tạo foreground mask = max của tất cả class khác background
+    const masks = result.confidenceMasks;
+    if (masks && masks.length > 0) {
+      const bgMask = masks[0]; // background class
+      const w = bgMask.width;
+      const h = bgMask.height;
+      // foreground = 1 - background
+      // Hoặc nếu nhiều class: foreground = max(class1, class2, ...) bỏ background
+      if (!cachedMask || cachedMask.length !== w * h) {
+        cachedMask = new Float32Array(w * h);
+      }
+      maskW = w;
+      maskH = h;
+      const bgData = bgMask.getAsFloat32Array();
+      for (let i = 0; i < bgData.length; i++) {
+        cachedMask[i] = 1.0 - bgData[i]; // invert: high = foreground
+      }
+    }
+    // Close result to free memory
+    if (result.close) result.close();
+  } catch (e) {
+    // silently ignore
+  }
+}
+
+/**
+ * TÌM CÁC TRANSITION (rìa vật thể) dọc theo cột scanX.
+ *
+ * Trả về mảng { y (display coords), confidence }
+ * Chỉ trả về điểm CHUYỂN TIẾP từ nền→vật (rising edge),
+ * KHÔNG trả về pixel bên trong vật thể.
+ */
+export function getEdgeTransitions(staffData, scanX) {
+  if (!cachedMask || maskW === 0) return null;
 
   const W = staffData.displayWidth;
   const H = staffData.displayHeight;
 
-  return staffData.positions.map(pos => {
-    // Map display coordinates → mask coordinates
-    const mx = Math.round((scanX / W) * cachedMaskWidth);
-    const my = Math.round((pos.y / H) * cachedMaskHeight);
+  // Map scanX từ display coords → mask coords
+  const mx = Math.round((scanX / W) * maskW);
+  if (mx < 0 || mx >= maskW) return null;
 
-    // Lấy average confidence trong vùng nhỏ xung quanh điểm (giảm noise)
-    const r = 3; // radius 3px trên mask
+  // Đọc cột dọc từ mask
+  const column = new Float32Array(maskH);
+  for (let y = 0; y < maskH; y++) {
+    column[y] = cachedMask[y * maskW + mx];
+  }
+
+  // Smooth cột (low-pass filter) để giảm noise
+  const smoothed = new Float32Array(maskH);
+  const kernelR = 2;
+  for (let y = 0; y < maskH; y++) {
     let sum = 0, count = 0;
-    for (let dy = -r; dy <= r; dy++) {
-      for (let dx = -r; dx <= r; dx++) {
-        const px = mx + dx, py = my + dy;
-        if (px >= 0 && px < cachedMaskWidth && py >= 0 && py < cachedMaskHeight) {
-          sum += cachedMask[py * cachedMaskWidth + px];
-          count++;
-        }
+    for (let dy = -kernelR; dy <= kernelR; dy++) {
+      const yy = y + dy;
+      if (yy >= 0 && yy < maskH) { sum += column[yy]; count++; }
+    }
+    smoothed[y] = sum / count;
+  }
+
+  // Tìm transitions: nơi mask chuyển từ <threshold sang >threshold
+  const THRESHOLD = 0.4;
+  const transitions = [];
+  let prevAbove = smoothed[0] > THRESHOLD;
+
+  for (let y = 1; y < maskH; y++) {
+    const curAbove = smoothed[y] > THRESHOLD;
+    if (curAbove && !prevAbove) {
+      // Rising edge — vật thể bắt đầu
+      // Confidence = sự sắc nét của transition (gradient)
+      const gradient = Math.abs(smoothed[y] - smoothed[y - 1]);
+      const confidence = Math.min(1.0, gradient * 3 + smoothed[y] * 0.5);
+      transitions.push({
+        y: (y / maskH) * H,  // chuyển về display coords
+        confidence: Math.max(0.3, confidence),
+      });
+    }
+    prevAbove = curAbove;
+  }
+
+  return transitions.length > 0 ? transitions : null;
+}
+
+export function drawDetections(ctx, staffData) {
+  // Optional: vẽ mask overlay mờ (debug mode)
+  // Hoặc vẽ các điểm transition như chấm sáng
+}
+```
+
+### File 2: `src/detection.js` — SỬA import và flow
+
+Thay đổi chính: Không còn dùng `getSmartResults()` với 13 vị trí cố định. Dùng `getEdgeTransitions()` trả về mảng transitions tại Y thực.
+
+```js
+import { isSmartReady, runInference, getEdgeTransitions } from './smartDetection.js';
+
+// Sửa function detectObjects():
+export function detectObjects({ appMode, photoImgEl, staffData, scanX, sensitivity }) {
+  if (!staffData) return null;
+
+  // ── Smart path: MediaPipe segmentation ──
+  if (isSmartReady()) {
+    const video = document.getElementById('cameraVideo');
+    const source = (appMode === 'photo' && photoImgEl) ? photoImgEl : video;
+    runInference(source);
+
+    const transitions = getEdgeTransitions(staffData, scanX);
+    if (transitions) {
+      // Trả về dạng mới: mảng {y, confidence, noteIndex}
+      // Map mỗi transition Y → note index trong scale
+      return transitions.map(t => ({
+        detected: true,
+        confidence: t.confidence,
+        y: t.y,
+        noteIndex: yToNoteIndex(t.y, staffData),
+      }));
+    }
+    // Fall through nếu chưa có mask
+  }
+
+  // ── Fallback: brightness + Canny (giữ nguyên logic cũ) ──
+  // ... giữ nguyên code fallback hiện tại nhưng wrap kết quả cùng format
+}
+
+/**
+ * Map vị trí Y (display) → index trong scale (0–12)
+ * Y thấp hơn (phía dưới) = index thấp (nốt trầm)
+ * Y cao hơn (phía trên) = index cao (nốt cao)
+ */
+function yToNoteIndex(y, staffData) {
+  const { staffTop, staffBottom } = staffData;
+  // Clamp Y vào vùng staff
+  const clampedY = Math.max(staffTop, Math.min(staffBottom, y));
+  // Invert: staffBottom = nốt thấp (index 0), staffTop = nốt cao (index 12)
+  const ratio = 1 - (clampedY - staffTop) / (staffBottom - staffTop);
+  return Math.round(ratio * 12);
+}
+```
+
+### File 3: `src/main.js` — SỬA animation loop
+
+Thay đổi cách trigger notes: Không còn loop qua 13 vị trí cố định. Dùng transitions trực tiếp.
+
+**Sửa phần animationLoop** (khoảng line 313-360):
+```js
+// Trigger notes từ edge transitions
+if (lastDetectionResults && isAudioReady()) {
+  let fired = 0;
+  for (const result of lastDetectionResults) {
+    if (fired >= MAX_NOTES_PER_PASS) break;
+    if (!result.detected) continue;
+
+    // Dùng noteIndex (từ Y position) thay vì index cố định
+    const noteIdx = result.noteIndex !== undefined ? result.noteIndex : 0;
+    const noteId = `note_y_${Math.round(result.y || 0)}`;
+
+    if (shouldTriggerNote(noteId, now, 250)) {
+      playNote(getNoteForPosition(noteIdx), confidenceToVelocity(result.confidence));
+      fired++;
+    }
+  }
+}
+```
+
+Cooldown key dùng `note_y_${y}` thay vì `note_${i}` — vì giờ notes không có index cố định mà theo vị trí Y thực.
+
+**Sửa phần renderStaff call:**
+```js
+// Truyền transitions thay vì fixed-position results
+renderStaff(curScanX, lastDetectionResults, staffData, isPlaying);
+```
+
+### File 4: `src/staff.js` — SỬA renderStaff và drawNoteIndicator
+
+Vì notes giờ ở vị trí Y động (không cố định trên khuông), render phải thay đổi.
+
+**Sửa renderStaff:**
+```js
+export function renderStaff(scanX, detectionResults, staffData, isPlaying) {
+  if (!staffData) return;
+  const sd = staffData;
+  ctx.clearRect(0, 0, sd.displayWidth, sd.displayHeight);
+
+  // Staff lines vẫn vẽ như cũ (visual guide)
+  if (showGrid) drawStaffLines(sd);
+  if (showClef) drawTrebleClef(sd);
+
+  if (isPlaying && scanX >= sd.staffLeft && scanX <= sd.staffRight) {
+    drawScanLine(scanX, sd);
+  }
+
+  if (detectionResults) {
+    // Vẽ passive dots tại 13 vị trí cố định (staff positions)
+    sd.positions.forEach(pos => {
+      drawNoteIndicator(scanX, pos.y, false, 0);
+    });
+
+    // Vẽ ACTIVE notes tại vị trí Y thực của transitions
+    for (const r of detectionResults) {
+      if (r.detected && r.y !== undefined) {
+        drawNoteIndicator(scanX, r.y, true, r.confidence);
       }
     }
-    const confidence = count > 0 ? sum / count : 0;
-
-    return {
-      detected: confidence > 0.4,  // threshold có thể tune
-      confidence,
-      position: pos,
-    };
-  });
+  } else {
+    sd.positions.forEach(pos => {
+      drawNoteIndicator(scanX, pos.y, false, 0);
+    });
+  }
 }
 ```
 
-**drawDetections — vẽ overlay mask lên canvas (debug/visual feedback):**
+### File 5: `vite.config.js` — WASM config
 
-Thay vì vẽ bounding box, vẽ mask overlay mờ màu xanh lá lên staff canvas:
 ```js
-export function drawDetections(ctx, staffData) {
-  if (!cachedMask || !staffData) return;
-  // Tạo ImageData từ mask, vẽ với globalAlpha thấp
-  // Chỉ vẽ khi debug mode bật (optional)
-}
+import { defineConfig } from 'vite';
+export default defineConfig({
+  base: '/',
+  optimizeDeps: {
+    exclude: ['@mediapipe/tasks-vision'],
+  },
+});
 ```
 
-### Bước 3 — Xử lý Photo mode vs Live mode
+## Thứ tự implement
 
-`runInference` nhận `imageSource` có thể là:
-- `HTMLVideoElement` (live mode) → dùng `segmentForVideo(source, Date.now())`
-- `HTMLImageElement` (photo mode) → dùng `segment(source)`
+1. **`npm install @mediapipe/tasks-vision`**
+2. **`src/smartDetection.js`** — viết lại hoàn toàn (MediaPipe + edge transitions)
+3. **`src/detection.js`** — sửa import, thêm `yToNoteIndex()`, đổi return format
+4. **`src/main.js`** — sửa animation loop (trigger notes từ transitions)
+5. **`src/staff.js`** — sửa renderStaff (vẽ notes tại Y động)
+6. **`vite.config.js`** — thêm WASM exclude
+7. Test trên mobile real device
 
-Detect loại:
-```js
-const isVideo = imageSource instanceof HTMLVideoElement;
-const result = isVideo
-  ? segmenter.segmentForVideo(imageSource, Date.now())
-  : segmenter.segment(imageSource);
-```
+## Fallback strategy
 
-### Bước 4 — Fallback nếu MediaPipe load thất bại
+- Nếu MediaPipe load thất bại → `isSmartReady()` = false → detection.js tự dùng brightness+Canny
+- Fallback CŨ vẫn dùng 13 vị trí cố định (chấp nhận được cho fallback)
+- Format trả về của fallback phải wrap để compatible:
+  ```js
+  return fixedResults.map((r, i) => ({
+    ...r,
+    y: staffData.positions[i].y,
+    noteIndex: i,
+  }));
+  ```
 
-Nếu `loadSmartModel()` throw, `isSmartReady()` trả về false → `detection.js` tự động fallback sang brightness+Canny. Không cần xử lý thêm.
+## Lưu ý kỹ thuật
 
-### Bước 5 — Kiểm tra performance
+1. **Model URL**: PHẢI verify URL đúng trước khi dùng. Check `https://ai.google.dev/edge/mediapipe/solutions/vision/image_segmenter` — URL model có thể thay đổi theo version.
 
-- Inference interval: bắt đầu với 150ms, tăng lên 300ms nếu device lag
-- Mask resolution: MediaPipe tự resize input, output mask thường 256×256
-- Không allocate array mới mỗi frame — reuse `cachedMask`
+2. **WASM files**: MediaPipe cần WASM runtime. Load từ CDN: `https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision/wasm`. Nếu lỗi CORS hoặc WASM, thử load bằng `<script>` tag trong `index.html` thay vì npm import.
 
-## Lưu ý quan trọng
+3. **Cooldown tuning**: `shouldTriggerNote` cooldown nên tăng lên 250ms (từ 180ms) vì edge transitions chính xác hơn — không cần trigger nhanh.
 
-1. **WASM files**: `@mediapipe/tasks-vision` cần WASM bundle. Với Vite cần config để copy WASM files vào public. Xem `vite.config.js` — có thể cần thêm:
-   ```js
-   // vite.config.js
-   import { defineConfig } from 'vite';
-   export default defineConfig({
-     base: '/',
-     optimizeDeps: {
-       exclude: ['@mediapipe/tasks-vision'],
-     },
-   });
-   ```
+4. **MAX_NOTES_PER_PASS**: Giữ nguyên 2 hoặc tăng lên 3 vì giờ notes chính xác hơn, ít noise hơn.
 
-2. **CDN alternative**: Nếu WASM config phức tạp, load MediaPipe từ CDN trong `index.html`:
-   ```html
-   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision/vision_bundle.js" crossorigin="anonymous"></script>
-   ```
-   Rồi dùng `window.Vision` thay vì import.
+5. **iOS Safari**: MediaPipe tasks-vision cần Safari 16+. Test thực tế trên device.
 
-3. **Model URL**: Phải verify URL model đúng từ https://ai.google.dev/edge/mediapipe/solutions/vision/image_segmenter trước khi dùng. URL có thể thay đổi theo version.
+6. **Memory**: Gọi `result.close()` sau khi đọc mask xong để free WASM memory.
 
-4. **iOS Safari compatibility**: MediaPipe tasks-vision hỗ trợ iOS Safari 16+. Kiểm tra thực tế trên device.
+## File KHÔNG thay đổi
 
-5. **Không xóa fallback**: `detection.js` đã có brightness+Canny fallback. Chỉ cần `isSmartReady()` trả false là fallback tự chạy.
-
-## File cần thay đổi
-
-- `src/smartDetection.js` — viết lại hoàn toàn
-- `vite.config.js` — có thể cần thêm config WASM
-- `package.json` — thêm dependency `@mediapipe/tasks-vision`
-
-## File KHÔNG được thay đổi
-
-- `src/detection.js` — API không đổi nên không cần sửa
-- `src/main.js` — không cần sửa
-- `src/audio.js`, `src/staff.js`, `src/camera.js` — không liên quan
+- `src/audio.js` — không cần sửa (playNote, getNoteForPosition vẫn dùng được)
+- `src/camera.js` — không liên quan
+- `src/i18n.js` — không liên quan
+- `index.html` — không cần sửa (trừ khi phải load WASM bằng script tag)
