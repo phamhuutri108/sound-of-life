@@ -30,6 +30,7 @@ const photoScanCtx = photoScanCanvas.getContext('2d', { willReadFrequently: true
 let _photoCache = null;   // Float32Array[H * W] row-major brightness
 let _photoCacheW = 0;
 let _photoCacheDispW = 1;
+let _photoBgBright = -1;  // pre-computed from full image — stable across all scan columns
 
 /**
  * Pre-scan a static photo into a brightness cache.
@@ -67,11 +68,21 @@ export function buildPhotoScanCache(source, staffData) {
   }
   _photoCacheW    = W;
   _photoCacheDispW = dispW;
+
+  // Pre-compute a single stable background brightness for the whole image.
+  // Using the full image (not per-column) means the same pixel always produces
+  // the same result on every scan pass — no flickering.
+  let sum = 0, sumSq = 0;
+  const N = _photoCache.length;
+  for (let i = 0; i < N; i++) { const v = _photoCache[i]; sum += v; sumSq += v * v; }
+  const mean = sum / N;
+  _photoBgBright = Math.max(mean, mean + 0.84 * Math.sqrt(Math.max(0, sumSq / N - mean * mean)));
 }
 
 export function clearPhotoScanCache() {
   _photoCache = null;
   _photoCacheW = 0;
+  _photoBgBright = -1;
 }
 
 /**
@@ -140,12 +151,18 @@ function detectDarkObjectsAtScanLine(source, staffData, scanX, sensitivity) {
     }
   }
 
-  // ── O(n) background brightness estimate (replaces Array.from().sort()) ────
-  // Approximates 80th-percentile brightness via mean + 0.84×std in one pass.
-  let sum = 0, sumSq = 0;
-  for (let i = 0; i < H; i++) { const v = smB[i]; sum += v; sumSq += v * v; }
-  const mean = sum / H;
-  const bgBright = Math.max(mean, mean + 0.84 * Math.sqrt(Math.max(0, sumSq / H - mean * mean)));
+  // ── Background brightness ─────────────────────────────────────────────────
+  // Photo: use pre-computed global value (stable — same result every scan pass)
+  // Live:  compute per-column (no cache available)
+  let bgBright;
+  if (_photoCache && _photoBgBright >= 0 && !(source instanceof HTMLVideoElement)) {
+    bgBright = _photoBgBright;
+  } else {
+    let sum = 0, sumSq = 0;
+    for (let i = 0; i < H; i++) { const v = smB[i]; sum += v; sumSq += v * v; }
+    const mean = sum / H;
+    bgBright = Math.max(mean, mean + 0.84 * Math.sqrt(Math.max(0, sumSq / H - mean * mean)));
+  }
 
   const threshFrac = 0.28 - (sensitivity / 100) * 0.20;
 
