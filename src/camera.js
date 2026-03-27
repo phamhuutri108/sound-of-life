@@ -2,30 +2,98 @@
 export let currentStream = null;
 export let cameraFacing = 'environment';
 
+function isLikelyInAppBrowser() {
+  const ua = navigator.userAgent || '';
+  return /Instagram|FBAN|FBAV|Line|Zalo|TikTok/i.test(ua);
+}
+
+function getCameraErrorMessage(err) {
+  const inApp = isLikelyInAppBrowser();
+  if (inApp) {
+    return 'Camera is limited in in-app browser. Open in Safari/Chrome and allow camera permission.';
+  }
+  if (err?.name === 'NotAllowedError' || err?.name === 'SecurityError') {
+    return 'Camera permission denied. Please allow camera access in browser settings and reload.';
+  }
+  if (err?.name === 'NotFoundError' || err?.name === 'OverconstrainedError') {
+    return 'No compatible camera found. Try switching camera or using another browser.';
+  }
+  return 'Camera access required. Please allow camera permissions and reload.';
+}
+
+function buildCameraAttempts(facing) {
+  return [
+    {
+      video: {
+        facingMode: { ideal: facing },
+        width: { ideal: 960 },
+        height: { ideal: 540 },
+        frameRate: { ideal: 24, max: 30 },
+      },
+      audio: false,
+    },
+    {
+      video: {
+        facingMode: facing,
+        width: { ideal: 1280 },
+        height: { ideal: 720 },
+      },
+      audio: false,
+    },
+    {
+      video: { width: { ideal: 640 }, height: { ideal: 480 } },
+      audio: false,
+    },
+    {
+      video: true,
+      audio: false,
+    },
+  ];
+}
+
 export function setCameraFacingState(facing) {
   cameraFacing = facing;
 }
 
 export async function startCamera(facing = 'environment') {
   const video = document.getElementById('cameraVideo');
+  const errorEl = document.getElementById('cameraError');
+  const errorTextEl = document.getElementById('txt-camera-error');
+
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    if (errorTextEl) {
+      errorTextEl.textContent = 'This browser does not support camera API. Please use Safari/Chrome.';
+    }
+    errorEl.classList.add('active');
+    return false;
+  }
 
   if (currentStream) {
     currentStream.getTracks().forEach(t => t.stop());
   }
-  try {
-    const stream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: facing, width: { ideal: 1280 }, height: { ideal: 720 } },
-      audio: false,
-    });
-    currentStream = stream;
-    video.srcObject = stream;
-    video.style.transform = facing === 'user' ? 'scaleX(-1)' : '';
-    await video.play();
-    document.getElementById('cameraError').classList.remove('active');
-  } catch (err) {
-    console.error('Camera error:', err);
-    document.getElementById('cameraError').classList.add('active');
+  let lastError = null;
+
+  const attempts = buildCameraAttempts(facing);
+  for (const constraints of attempts) {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia(constraints);
+      currentStream = stream;
+      video.srcObject = stream;
+      video.style.transform = facing === 'user' ? 'scaleX(-1)' : '';
+      await video.play();
+      errorEl.classList.remove('active');
+      return true;
+    } catch (err) {
+      lastError = err;
+    }
   }
+
+  console.error('Camera error:', lastError);
+  if (errorTextEl) {
+    errorTextEl.textContent = getCameraErrorMessage(lastError);
+  }
+  errorEl.classList.add('active');
+  return false;
 }
 
 export async function flipCamera({ appMode, photoDataURL, onFacingChange }) {

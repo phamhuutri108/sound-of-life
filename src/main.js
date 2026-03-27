@@ -159,7 +159,6 @@ function goHome() {
 
 async function selectMode(mode) {
   initAudio(); // sync within user gesture — do NOT await
-  loadSmartModel(); // fire-and-forget; detection falls back until ready
   activePerfProfile = resolvePerfProfile();
   setSmartProfile(activePerfProfile);
   document.getElementById('splash').classList.add('hidden');
@@ -169,7 +168,15 @@ async function selectMode(mode) {
   document.getElementById('zoomControls').style.display = '';
   document.getElementById('zoomControls').style.opacity = '1';
   applyMode(mode);
-  await startCamera(_cameraFacing);
+  const cameraStarted = await startCamera(_cameraFacing);
+
+  // Prioritize camera readiness first; load segmentation after UI becomes interactive.
+  if (cameraStarted) {
+    setTimeout(() => {
+      loadSmartModel();
+    }, 120);
+  }
+
   initCameraZoom();
   staffData = resizeCanvas();
   if (staffData) scanX = staffData.staffLeft;

@@ -1,0 +1,18 @@
+{
+  "git.openRepositoryInParentFolders": "never",
+  "git.autoRepositoryDetection": false,
+  "git.ignoredRepositories": [
+    "/Users/phamhuutri/Desktop/websites/app/sound-of-life-backup"
+  ],
+  "files.exclude": {
+    "**/.venv": true,
+    "**/.git": true,
+    "**/node_modules": true,
+    "**/dist": true
+  },
+  "search.exclude": {
+    "**/.venv": true,
+    "**/node_modules": true,
+    "**/dist": true
+  }
+}
