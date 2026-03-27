@@ -137,7 +137,7 @@ button, .toolbar-btn, .segment-btn, .top-btn {
 .splash-subtitle {
   font-family: var(--font-ui);
   font-weight: 300;
-  font-size: clamp(12px, 3vw, 13px);
+  font-size: clamp(16px, 3.9vw, 17px);
   color: rgba(242, 236, 224, 0.72);
   margin-top: 16px;
   text-align: center;
@@ -830,7 +830,7 @@ button, .toolbar-btn, .segment-btn, .top-btn {
 
   /* ── Splash: compact vertical centering ── */
   .splash-title { font-size: clamp(18px, 5vh, 28px); }
-  .splash-subtitle { margin-top: 8px; font-size: 11px; }
+  .splash-subtitle { margin-top: 8px; font-size: 14px; }
   .splash-start-btn { margin-top: 20px; padding: 10px 32px; }
   .splash-lang { bottom: max(8px, env(safe-area-inset-bottom)); }
 
