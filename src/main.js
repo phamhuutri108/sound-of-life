@@ -25,7 +25,13 @@ import {
   noteCooldowns, shouldTriggerNote,
   detectObjects as _detectObjects,
 } from './detection.js';
-import { loadSmartModel, isSmartReady, drawDetections, getSmartBackend } from './smartDetection.js';
+import {
+  loadSmartModel,
+  isSmartReady,
+  drawDetections,
+  getSmartBackend,
+  setSmartProfile,
+} from './smartDetection.js';
 
 /* ═══════════════════════════════════════════════════════════════
    APP STATE
@@ -154,6 +160,8 @@ function goHome() {
 async function selectMode(mode) {
   initAudio(); // sync within user gesture — do NOT await
   loadSmartModel(); // fire-and-forget; detection falls back until ready
+  activePerfProfile = resolvePerfProfile();
+  setSmartProfile(activePerfProfile);
   document.getElementById('splash').classList.add('hidden');
   document.getElementById('cameraView').classList.add('active');
   document.getElementById('topBar').style.display = '';
@@ -307,14 +315,79 @@ function setCameraFacing(facing) {
 ═══════════════════════════════════════════════════════════════ */
 let lastDetectionTime = 0;
 let lastDetectionResults = null;
+let lastAnyNoteTime = 0;
+let lastFrameTime = 0;
+let fpsEma = 60;
+let lastPerfTuneTime = 0;
+let activePerfProfile = 'balanced';
 const isHighEndIPhone = /iPhone/i.test(navigator.userAgent || '')
   && (navigator.hardwareConcurrency || 4) >= 6
   && (window.devicePixelRatio || 1) >= 3;
-const BASE_DETECTION_INTERVAL = isHighEndIPhone ? 150 : 220;
+const BASE_DETECTION_INTERVAL = isHighEndIPhone ? 180 : 260;
 const MAX_NOTES_PER_PASS = 2;
+const GLOBAL_NOTE_GAP_MS = 65;
+const NOTE_COOLDOWN_MS = 210;
+const PERF_QUERY = new URLSearchParams(window.location.search).get('perf');
+const PERF_MODE = (['auto', 'ultra-smooth', 'responsive'].includes(PERF_QUERY) ? PERF_QUERY : 'auto');
+
+function updateFpsEstimate(now) {
+  if (!lastFrameTime) {
+    lastFrameTime = now;
+    return;
+  }
+
+  const dt = now - lastFrameTime;
+  lastFrameTime = now;
+  if (dt <= 0) return;
+
+  const fps = 1000 / dt;
+  fpsEma = fpsEma * 0.9 + fps * 0.1;
+}
+
+function resolvePerfProfile() {
+  if (PERF_MODE === 'ultra-smooth') return 'ultra-smooth';
+  if (PERF_MODE === 'responsive') return 'responsive';
+
+  // Auto mode: adapt from realtime FPS with hysteresis to avoid profile flapping.
+  if (fpsEma < 27) return 'ultra-smooth';
+  if (fpsEma > 52 && isHighEndIPhone) return 'responsive';
+  if (fpsEma > 46) return 'balanced';
+  if (fpsEma < 34 && activePerfProfile !== 'ultra-smooth') return 'ultra-smooth';
+  return activePerfProfile;
+}
+
+function applyPerformanceTuning(now) {
+  if (now - lastPerfTuneTime < 900) return;
+  lastPerfTuneTime = now;
+
+  const nextProfile = resolvePerfProfile();
+  if (nextProfile !== activePerfProfile) {
+    activePerfProfile = nextProfile;
+    setSmartProfile(nextProfile);
+  }
+}
+
+function getDetectionInterval(activeBackend) {
+  if (activePerfProfile === 'ultra-smooth') {
+    return activeBackend === 'mediapipe'
+      ? BASE_DETECTION_INTERVAL + 90
+      : BASE_DETECTION_INTERVAL + 120;
+  }
+  if (activePerfProfile === 'responsive') {
+    return activeBackend === 'mediapipe'
+      ? Math.max(110, BASE_DETECTION_INTERVAL - 50)
+      : Math.max(140, BASE_DETECTION_INTERVAL - 25);
+  }
+
+  return activeBackend === 'mediapipe'
+    ? BASE_DETECTION_INTERVAL
+    : BASE_DETECTION_INTERVAL + 40;
+}
 
 function animationLoop(now) {
   requestAnimationFrame(animationLoop);
+  updateFpsEstimate(now);
+  applyPerformanceTuning(now);
 
   if (!staffData || !isPlaying) {
     // Still render staff (without scan line movement), respecting showClef/showGrid flags
@@ -329,9 +402,7 @@ function animationLoop(now) {
 
   // Detection (throttled)
   const activeBackend = getSmartBackend();
-  const activeInterval = activeBackend === 'mediapipe'
-    ? BASE_DETECTION_INTERVAL
-    : (BASE_DETECTION_INTERVAL + 40);
+  const activeInterval = getDetectionInterval(activeBackend);
   if (now - lastDetectionTime > activeInterval) {
     lastDetectionTime = now;
 
@@ -350,20 +421,29 @@ function animationLoop(now) {
 
       // Trigger notes from edge transitions
       if (lastDetectionResults && isAudioReady()) {
-        let fired = 0;
+        // Keep only strongest edge per pitch lane to avoid jitter retriggering.
+        const strongestByNote = new Map();
         for (const result of lastDetectionResults) {
-          if (fired >= MAX_NOTES_PER_PASS) break;
           if (!result.detected) continue;
-
-          // Use noteIndex (from Y position) instead of fixed index
           const noteIdx = result.noteIndex !== undefined ? result.noteIndex : 0;
-          const yBin = Math.round((result.y || 0) / 12);
-          const noteId = `note_lane_${noteIdx}_ybin_${yBin}`;
-
-          if (shouldTriggerNote(noteId, now, 250)) {
-            playNote(getNoteForPosition(noteIdx), confidenceToVelocity(result.confidence));
-            fired++;
+          const prev = strongestByNote.get(noteIdx);
+          if (!prev || result.confidence > prev.confidence) {
+            strongestByNote.set(noteIdx, result);
           }
+        }
+
+        const candidates = Array.from(strongestByNote.entries())
+          .map(([noteIdx, result]) => ({ noteIdx, confidence: result.confidence }))
+          .sort((a, b) => b.confidence - a.confidence)
+          .slice(0, MAX_NOTES_PER_PASS);
+
+        for (const c of candidates) {
+          if (now - lastAnyNoteTime < GLOBAL_NOTE_GAP_MS) break;
+          const noteId = `edge_note_${c.noteIdx}`;
+          if (!shouldTriggerNote(noteId, now, NOTE_COOLDOWN_MS)) continue;
+
+          playNote(getNoteForPosition(c.noteIdx), confidenceToVelocity(c.confidence));
+          lastAnyNoteTime = now;
         }
       }
     }

@@ -3,6 +3,7 @@ import { ImageSegmenter, FilesetResolver } from '@mediapipe/tasks-vision';
 let segmenter = null;
 let loading = false;
 let lastInferenceTime = 0;
+let inferenceInFlight = false;
 
 const MEDIAPIPE_MODEL_URL =
   'https://storage.googleapis.com/mediapipe-models/image_segmenter/deeplab_v3/float32/1/deeplab_v3.tflite';
@@ -12,10 +13,10 @@ const frameCtx = frameCanvas.getContext('2d', { willReadFrequently: true });
 const roiCanvas = document.createElement('canvas');
 const roiCtx = roiCanvas.getContext('2d', { willReadFrequently: true });
 
-const ROI_TARGET_W = 320;
-const ROI_TARGET_H_MAX = 220;
+let roiTargetW = 256;
+let roiTargetHMax = 192;
 const TEMPORAL_ALPHA = 0.42;
-const INFERENCE_INTERVAL = 140;
+let inferenceInterval = 170;
 
 let cachedMask = null; // Float32Array foreground confidence in ROI mask-space
 let maskW = 0;
@@ -26,8 +27,35 @@ let roiMap = null;
 
 // History of stable edge rows to reduce frame-to-frame randomness
 const edgeHistory = [];
-const EDGE_HISTORY_LEN = 3;
+const EDGE_HISTORY_LEN = 4;
 const EDGE_MATCH_TOLERANCE = 10;
+let smoothRadius = 1;
+let edgePickLimit = 3;
+let smartProfile = 'balanced';
+
+const PROFILE_CONFIG = {
+  'ultra-smooth': {
+    roiTargetW: 224,
+    roiTargetHMax: 168,
+    inferenceInterval: 220,
+    smoothRadius: 2,
+    edgePickLimit: 2,
+  },
+  balanced: {
+    roiTargetW: 256,
+    roiTargetHMax: 192,
+    inferenceInterval: 170,
+    smoothRadius: 1,
+    edgePickLimit: 3,
+  },
+  responsive: {
+    roiTargetW: 288,
+    roiTargetHMax: 208,
+    inferenceInterval: 130,
+    smoothRadius: 1,
+    edgePickLimit: 4,
+  },
+};
 
 export function isSmartReady() {
   return !!segmenter;
@@ -39,6 +67,22 @@ export function isSmartLoading() {
 
 export function getSmartBackend() {
   return isSmartReady() ? 'mediapipe' : 'none';
+}
+
+export function setSmartProfile(profile = 'balanced') {
+  const next = PROFILE_CONFIG[profile] ? profile : 'balanced';
+  const cfg = PROFILE_CONFIG[next];
+
+  smartProfile = next;
+  roiTargetW = cfg.roiTargetW;
+  roiTargetHMax = cfg.roiTargetHMax;
+  inferenceInterval = cfg.inferenceInterval;
+  smoothRadius = cfg.smoothRadius;
+  edgePickLimit = cfg.edgePickLimit;
+}
+
+export function getSmartProfile() {
+  return smartProfile;
 }
 
 function clamp(v, lo, hi) {
@@ -110,9 +154,9 @@ function computeRoiRect(staffData, displayW, displayH) {
 }
 
 function buildRoiCanvas(roiRect) {
-  const scale = ROI_TARGET_W / roiRect.w;
-  const targetW = ROI_TARGET_W;
-  const targetH = clamp(Math.round(roiRect.h * scale), 64, ROI_TARGET_H_MAX);
+  const scale = roiTargetW / roiRect.w;
+  const targetW = roiTargetW;
+  const targetH = clamp(Math.round(roiRect.h * scale), 64, roiTargetHMax);
 
   roiCanvas.width = targetW;
   roiCanvas.height = targetH;
@@ -193,8 +237,9 @@ export async function runInference(imageSource, opts = {}) {
   if (!segmenter || !imageSource || !opts.staffData) return;
 
   const now = Date.now();
-  if (now - lastInferenceTime < INFERENCE_INTERVAL) return;
+  if (inferenceInFlight || now - lastInferenceTime < inferenceInterval) return;
   lastInferenceTime = now;
+  inferenceInFlight = true;
 
   try {
     const isVideo = imageSource instanceof HTMLVideoElement;
@@ -219,18 +264,16 @@ export async function runInference(imageSource, opts = {}) {
       displayH: displayInfo.displayH,
     };
 
-    if (isVideo) {
-      segmenter.segmentForVideo(roiCanvas, now, (result) => {
-        readForegroundMask(result);
-        if (typeof result?.close === 'function') result.close();
-      });
-    } else {
-      const result = segmenter.segment(roiCanvas);
-      readForegroundMask(result);
-      if (typeof result?.close === 'function') result.close();
-    }
+    const result = isVideo
+      ? segmenter.segmentForVideo(roiCanvas, now)
+      : segmenter.segment(roiCanvas);
+
+    readForegroundMask(result);
+    if (typeof result?.close === 'function') result.close();
   } catch {
     // keep silent in realtime loop
+  } finally {
+    inferenceInFlight = false;
   }
 }
 
@@ -252,7 +295,7 @@ function getColumnFromMask(scanX) {
 
 function smoothColumn(column) {
   const smoothed = new Float32Array(column.length);
-  const radius = 2;
+  const radius = smoothRadius;
   for (let y = 0; y < column.length; y++) {
     let sum = 0;
     let count = 0;
@@ -348,7 +391,7 @@ export function getEdgeTransitions(staffData, scanX, sensitivity = 50) {
   for (const t of rawTransitions) {
     const near = picked.some(p => Math.abs(p.y - t.y) < 12);
     if (!near) picked.push(t);
-    if (picked.length >= 5) break;
+    if (picked.length >= edgePickLimit) break;
   }
 
   picked.sort((a, b) => a.y - b.y);
@@ -362,3 +405,5 @@ export function getEdgeTransitions(staffData, scanX, sensitivity = 50) {
 export function drawDetections(ctx, staffData) {
   // Optional debug overlay hook.
 }
+
+setSmartProfile('balanced');

@@ -148,7 +148,7 @@ export function getNoteForPosition(idx) {
 }
 
 export function confidenceToVelocity(conf) {
-  return 0.5 + conf * 0.5;
+  return 0.42 + conf * 0.38;
 }
 
 export function releaseAllInstruments() {
