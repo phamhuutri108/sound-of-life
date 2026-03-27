@@ -11,7 +11,7 @@ import {
 import {
   startCamera, flipCamera as _flipCamera, setCameraFacing as _setCameraFacing,
   capturePhoto as _capturePhoto, retakePhoto, importPhoto as _importPhoto,
-  cameraFacing as _cameraFacing,
+  cameraFacing as _cameraFacing, currentStream,
 } from './camera.js';
 import {
   ctx,
@@ -109,6 +109,7 @@ function goHome() {
   }
   // Reset photo state
   doRetakePhoto();
+  applyZoom(1);
 
   // Hide camera UI
   document.getElementById('topBar').style.display = 'none';
@@ -120,7 +121,7 @@ function goHome() {
   document.getElementById('splash').classList.remove('hidden');
 }
 
-function selectMode(mode) {
+async function selectMode(mode) {
   initAudio(); // sync within user gesture — do NOT await
   loadSmartModel(); // fire-and-forget; detection falls back until ready
   document.getElementById('splash').classList.add('hidden');
@@ -128,8 +129,10 @@ function selectMode(mode) {
   document.getElementById('topBar').style.display = '';
   document.getElementById('bottomToolbar').style.display = '';
   document.getElementById('zoomControls').style.display = '';
+  document.getElementById('zoomControls').style.opacity = '0';
   applyMode(mode);
-  startCamera(_cameraFacing);
+  await startCamera(_cameraFacing);
+  initCameraZoom();
   staffData = resizeCanvas();
   if (staffData) scanX = staffData.staffLeft;
   startAnimationLoop();
@@ -274,111 +277,89 @@ function startAnimationLoop() {
 
 
 /* ═══════════════════════════════════════════════════════════════
-   ZOOM
+   ZOOM — real camera zoom (applyConstraints) with CSS scale fallback
 ═══════════════════════════════════════════════════════════════ */
 const ZOOM_MIN = 1;
-const ZOOM_MAX = 5;
-const ZOOM_PRESETS = [1, 2, 3];
+const ZOOM_MAX_DEFAULT = 5;
 let currentZoom = 1;
+let zoomMax = ZOOM_MAX_DEFAULT;
+
+// Hardware zoom state
+let zoomTrack  = null; // MediaStreamTrack with zoom capability
+let zoomHwMin  = 1;
+let zoomHwMax  = ZOOM_MAX_DEFAULT;
+
+// Auto-hide pill
+let zoomHideTimer = null;
+let zoomPillVisible = false;
+
+function initCameraZoom() {
+  zoomTrack = null;
+  const stream = currentStream;
+  if (!stream) return;
+  const track = stream.getVideoTracks()[0];
+  if (!track) return;
+  const caps = typeof track.getCapabilities === 'function' ? track.getCapabilities() : {};
+  if (caps.zoom) {
+    zoomTrack = track;
+    zoomHwMin = caps.zoom.min ?? 1;
+    zoomHwMax = caps.zoom.max ?? ZOOM_MAX_DEFAULT;
+    zoomMax   = zoomHwMax;
+  } else {
+    zoomMax = ZOOM_MAX_DEFAULT;
+  }
+  // Reset to 1× on new camera
+  currentZoom = 1;
+  document.getElementById('zoomContainer').style.transform = '';
+  updateZoomPill();
+}
 
 function applyZoom(z) {
-  currentZoom = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, z));
-  // Scale the zoom container — overflow is clipped by parent .camera-view
+  currentZoom = Math.min(zoomMax, Math.max(ZOOM_MIN, z));
+
+  if (zoomTrack) {
+    const hwZ = Math.min(zoomHwMax, Math.max(zoomHwMin, currentZoom));
+    zoomTrack.applyConstraints({ advanced: [{ zoom: hwZ }] }).catch(() => {
+      // hardware zoom failed — CSS fallback
+      _applyCSSZoom(currentZoom);
+    });
+    // Clear CSS scale when using hardware zoom
+    document.getElementById('zoomContainer').style.transform = '';
+  } else {
+    _applyCSSZoom(currentZoom);
+  }
+
+  updateZoomPill();
+  bumpZoomPillVisible();
+}
+
+function _applyCSSZoom(z) {
   document.getElementById('zoomContainer').style.transform =
-    currentZoom === 1 ? '' : `scale(${currentZoom})`;
-  updateZoomButtons();
+    z <= 1.0001 ? '' : `scale(${z})`;
 }
 
-function updateZoomButtons() {
-  document.querySelectorAll('.zoom-btn').forEach(btn => btn.classList.remove('active'));
-  const presetIds = ['zoomBtn1', 'zoomBtn2', 'zoomBtn3'];
-  ZOOM_PRESETS.forEach((z, i) => {
-    if (Math.abs(currentZoom - z) < 0.05) {
-      document.getElementById(presetIds[i]).classList.add('active');
-    }
-  });
+function bumpZoomPillVisible() {
+  const pill = document.getElementById('zoomControls');
+  pill.style.opacity = '1';
+  zoomPillVisible = true;
+  clearTimeout(zoomHideTimer);
+  zoomHideTimer = setTimeout(() => {
+    pill.style.opacity = '0';
+    zoomPillVisible = false;
+  }, 3000);
 }
 
-/* ── Long-press zoom wheel ── */
-const WHEEL_DRAG_SCALE = 0.015; // zoom change per pixel dragged
-let wheelActive = false;
-let wheelStartX = 0;
-let wheelStartZoom = 1;
-let longPressTimer = null;
-
-function showZoomWheel() {
-  const wrap = document.getElementById('zoomWheelWrap');
-  wrap.style.display = '';
-  wheelActive = true;
-  updateWheelKnob();
-  if (navigator.vibrate) navigator.vibrate(10);
-}
-
-function hideZoomWheel() {
-  document.getElementById('zoomWheelWrap').style.display = 'none';
-  wheelActive = false;
-}
-
-function updateWheelKnob() {
-  const track = document.getElementById('zoomWheelTrack');
-  const knob  = document.getElementById('zoomWheelKnob');
-  const fill  = document.getElementById('zoomWheelFill');
-  const label = document.getElementById('zoomWheelValue');
-  const W = track.clientWidth;
-  const ratio = (currentZoom - ZOOM_MIN) / (ZOOM_MAX - ZOOM_MIN);
-  const x = Math.round(ratio * W);
-  knob.style.left = x + 'px';
-  fill.style.width = x + 'px';
-  label.textContent = currentZoom.toFixed(1) + '×';
-}
-
-function wireZoomWheel() {
+function updateZoomPill() {
   const presetDefs = [
     { id: 'zoomBtn1', z: 1 },
     { id: 'zoomBtn2', z: 2 },
     { id: 'zoomBtn3', z: 3 },
   ];
-
   presetDefs.forEach(({ id, z }) => {
     const btn = document.getElementById(id);
-
-    // Tap → set preset immediately
-    btn.addEventListener('click', () => {
-      applyZoom(z);
-    });
-
-    // Long press → show wheel (passive so click still fires for short taps)
-    btn.addEventListener('touchstart', e => {
-      wheelStartX    = e.touches[0].clientX;
-      wheelStartZoom = currentZoom;
-      longPressTimer = setTimeout(() => {
-        showZoomWheel();
-      }, 300);
-    }, { passive: true });
-
-    btn.addEventListener('touchend', () => {
-      clearTimeout(longPressTimer);
-    }, { passive: true });
-
-    btn.addEventListener('touchmove', () => {
-      clearTimeout(longPressTimer);
-    }, { passive: true });
+    const isActive = Math.abs(currentZoom - z) < 0.08;
+    btn.classList.toggle('active', isActive);
   });
-
-  // Drag on the track itself after wheel is shown
-  document.addEventListener('touchmove', e => {
-    if (!wheelActive) return;
-    const dx = e.touches[0].clientX - wheelStartX;
-    applyZoom(wheelStartZoom + dx * WHEEL_DRAG_SCALE);
-    updateWheelKnob();
-  }, { passive: true });
-
-  document.addEventListener('touchend', () => {
-    if (!wheelActive) return;
-    wheelStartZoom = currentZoom;
-    wheelStartX    = 0;
-    setTimeout(hideZoomWheel, 1200);
-  }, { passive: true });
 }
 
 /* ── Pinch-to-zoom ── */
@@ -447,6 +428,11 @@ function wireUI() {
   document.getElementById('btn-cam-front').addEventListener('click', () => setCameraFacing('user'));
   document.getElementById('btn-cam-back').addEventListener('click', () => setCameraFacing('environment'));
 
+  // Re-init hardware zoom after camera flip or switch
+  document.getElementById('cameraVideo').addEventListener('loadedmetadata', () => {
+    initCameraZoom();
+  });
+
   // Language buttons in settings
   document.getElementById('set-langEN').addEventListener('click', () => setLanguage('en', { isPlaying }));
   document.getElementById('set-langVI').addEventListener('click', () => setLanguage('vi', { isPlaying }));
@@ -456,8 +442,14 @@ function wireUI() {
     tryUnlockAudio();
   }, { passive: true });
 
-  // Zoom wheel long-press + preset buttons
-  wireZoomWheel();
+  // Zoom preset buttons
+  [
+    { id: 'zoomBtn1', z: 1 },
+    { id: 'zoomBtn2', z: 2 },
+    { id: 'zoomBtn3', z: 3 },
+  ].forEach(({ id, z }) => {
+    document.getElementById(id).addEventListener('click', () => applyZoom(z));
+  });
 
   // Pinch-to-zoom (2 fingers on camera view)
   const cameraViewEl = document.getElementById('cameraView');
@@ -474,6 +466,11 @@ function wireUI() {
       const dist = getPinchDist(e);
       applyZoom(pinchStartZoom * (dist / pinchStartDist));
     }
+  }, { passive: true });
+
+  // Show pill when touching the viewfinder
+  cameraViewEl.addEventListener('touchstart', () => {
+    bumpZoomPillVisible();
   }, { passive: true });
 
   // Double-tap to reset zoom to 1×

@@ -54,7 +54,7 @@ export function calculateStaffPositions(canvasW, canvasH) {
 }
 
 export function drawStaffLines(sd) {
-  ctx.strokeStyle = 'rgba(185, 220, 165, 0.5)';
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.55)';
   ctx.lineWidth = 1.5;
   ctx.setLineDash([]);
   sd.positions.forEach(pos => {
@@ -67,14 +67,14 @@ export function drawStaffLines(sd) {
     if (pos.isLedger) {
       const cx  = sd.displayWidth / 2;
       const hw  = sd.spacing * 2;
-      ctx.strokeStyle = 'rgba(185,220,165,0.3)';
+      ctx.strokeStyle = 'rgba(255,255,255,0.3)';
       ctx.setLineDash([4, 3]);
       ctx.beginPath();
       ctx.moveTo(cx - hw, pos.y);
       ctx.lineTo(cx + hw, pos.y);
       ctx.stroke();
       ctx.setLineDash([]);
-      ctx.strokeStyle = 'rgba(185, 220, 165, 0.5)';
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.55)';
     }
   });
 }

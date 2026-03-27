@@ -131,7 +131,7 @@ button, .toolbar-btn, .segment-btn, .top-btn {
   font-family: var(--font-ui);
   font-weight: 300;
   font-size: clamp(12px, 3vw, 13px);
-  color: var(--text-muted);
+  color: rgba(242, 236, 224, 0.72);
   margin-top: 16px;
   text-align: center;
   padding: 0 32px;
@@ -165,8 +165,8 @@ button, .toolbar-btn, .segment-btn, .top-btn {
 }
 
 .lang-btn.active {
-  border-color: var(--accent-gold);
-  color: var(--accent-gold);
+  border-color: rgba(255, 255, 255, 0.6);
+  color: rgba(255, 255, 255, 0.9);
 }
 
 /* ═══════════════════════════════════════
@@ -189,7 +189,7 @@ button, .toolbar-btn, .segment-btn, .top-btn {
   to   { opacity: 1; }
 }
 
-/* ── Kodama body ── */
+/* ── Glowing star sparkles ── */
 .kodama-layer {
   position: absolute;
   inset: 0;
@@ -198,62 +198,72 @@ button, .toolbar-btn, .segment-btn, .top-btn {
 
 .kodama {
   position: absolute;
-  width: 20px;
-  height: 26px;
-  /* rounded head shape */
-  border-radius: 50% 50% 42% 42% / 55% 55% 45% 45%;
-  background: radial-gradient(ellipse 65% 60% at 50% 42%,
-    rgba(245, 255, 240, 0.96) 0%,
-    rgba(210, 245, 195, 0.80) 40%,
-    rgba(170, 225, 150, 0.35) 70%,
-    transparent 100%
-  );
-  box-shadow:
-    0 0 14px 5px  rgba(190, 245, 160, 0.45),
-    0 0 32px 12px rgba(150, 220, 120, 0.18);
-  /* two eyes via box-shadow on ::before */
-  animation: kodamaFloat ease-in-out infinite;
+  /* center glow */
+  background: radial-gradient(circle, rgba(255,255,230,0.95) 0%, rgba(255,255,200,0.4) 25%, transparent 65%);
+  border-radius: 0;
+  box-shadow: none;
+  animation: starTwinkle ease-in-out infinite;
 }
 
-/* Eyes */
+/* Vertical spike */
 .kodama::before {
   content: '';
   position: absolute;
-  width: 5px; height: 4px;
-  border-radius: 50%;
-  background: rgba(18, 40, 12, 0.82);
-  top: 11px; left: 4px;
-  box-shadow: 8px 0 0 rgba(18, 40, 12, 0.82);
+  top: 0; left: 50%;
+  transform: translateX(-50%);
+  width: 1.5px; height: 100%;
+  background: linear-gradient(
+    to bottom,
+    transparent 0%,
+    rgba(255, 255, 230, 0.7) 15%,
+    rgba(255, 255, 255, 1)   50%,
+    rgba(255, 255, 230, 0.7) 85%,
+    transparent 100%
+  );
+  border-radius: 100px;
+  box-shadow: 0 0 5px 2px rgba(255, 255, 210, 0.55);
 }
 
-/* Subtle body outline */
+/* Horizontal spike */
 .kodama::after {
   content: '';
   position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  border: 1px solid rgba(200, 240, 180, 0.3);
+  top: 50%; left: 0;
+  transform: translateY(-50%);
+  width: 100%; height: 1.5px;
+  background: linear-gradient(
+    to right,
+    transparent 0%,
+    rgba(255, 255, 230, 0.7) 15%,
+    rgba(255, 255, 255, 1)   50%,
+    rgba(255, 255, 230, 0.7) 85%,
+    transparent 100%
+  );
+  border-radius: 100px;
+  box-shadow: 0 0 5px 2px rgba(255, 255, 210, 0.55);
 }
 
-@keyframes kodamaFloat {
-  0%   { transform: translateY(0)    rotate(-4deg); opacity: 0.85; }
-  30%  { transform: translateY(-14px) rotate(2deg); opacity: 1; }
-  60%  { transform: translateY(-8px)  rotate(-2deg); opacity: 0.9; }
-  100% { transform: translateY(0)    rotate(-4deg); opacity: 0.85; }
+@keyframes starTwinkle {
+  0%   { opacity: 0.15; transform: scale(0.5) rotate(0deg); }
+  20%  { opacity: 1;    transform: scale(1.1) rotate(12deg); }
+  40%  { opacity: 0.4;  transform: scale(0.7) rotate(24deg); }
+  65%  { opacity: 1;    transform: scale(1.3) rotate(38deg); }
+  85%  { opacity: 0.5;  transform: scale(0.8) rotate(42deg); }
+  100% { opacity: 0.15; transform: scale(0.5) rotate(45deg); }
 }
 
 @keyframes kodamaAppear {
-  0%   { opacity: 0; transform: translateY(10px) scale(0.7); }
-  100% { opacity: 1; transform: translateY(0)    scale(1); }
+  0%   { opacity: 0; transform: scale(0) rotate(0deg); }
+  100% { opacity: 1; transform: scale(1) rotate(0deg); }
 }
 
-/* Individual positions & timings */
-.k1 { left: 10%; top: 62%; width: 16px; height: 21px; animation: kodamaFloat 4.2s 0.0s ease-in-out infinite, kodamaAppear 1s 0.4s both; }
-.k2 { left: 76%; top: 22%; width: 22px; height: 28px; animation: kodamaFloat 5.0s 0.8s ease-in-out infinite, kodamaAppear 1s 0.7s both; }
-.k3 { left: 85%; top: 52%; width: 18px; height: 23px; animation: kodamaFloat 3.8s 1.5s ease-in-out infinite, kodamaAppear 1s 1.0s both; }
-.k4 { left: 28%; top: 15%; width: 14px; height: 18px; animation: kodamaFloat 4.6s 0.4s ease-in-out infinite, kodamaAppear 1s 0.9s both; }
-.k5 { left: 55%; top: 72%; width: 20px; height: 26px; animation: kodamaFloat 5.5s 1.1s ease-in-out infinite, kodamaAppear 1s 0.6s both; }
-.k6 { left: 5%;  top: 30%; width: 13px; height: 17px; animation: kodamaFloat 4.0s 2.0s ease-in-out infinite, kodamaAppear 1s 1.3s both; }
+/* Individual star sizes, positions & timings */
+.k1 { left:  9%; top: 63%; width: 28px; height: 28px; animation: starTwinkle 3.5s 0.0s ease-in-out infinite, kodamaAppear 0.8s 0.4s both; }
+.k2 { left: 76%; top: 20%; width: 42px; height: 42px; animation: starTwinkle 4.8s 0.8s ease-in-out infinite, kodamaAppear 0.8s 0.7s both; }
+.k3 { left: 84%; top: 53%; width: 22px; height: 22px; animation: starTwinkle 3.1s 1.5s ease-in-out infinite, kodamaAppear 0.8s 1.0s both; }
+.k4 { left: 27%; top: 14%; width: 18px; height: 18px; animation: starTwinkle 4.0s 0.3s ease-in-out infinite, kodamaAppear 0.8s 0.9s both; }
+.k5 { left: 54%; top: 73%; width: 32px; height: 32px; animation: starTwinkle 5.2s 1.2s ease-in-out infinite, kodamaAppear 0.8s 0.6s both; }
+.k6 { left:  5%; top: 31%; width: 16px; height: 16px; animation: starTwinkle 3.8s 2.1s ease-in-out infinite, kodamaAppear 0.8s 1.3s both; }
 
 /* ── Sparkle particles ── */
 .sparkle-layer {
@@ -265,7 +275,8 @@ button, .toolbar-btn, .segment-btn, .top-btn {
 .sp {
   position: absolute;
   border-radius: 50%;
-  background: radial-gradient(circle, rgba(200,255,180,0.9) 0%, transparent 70%);
+  background: radial-gradient(circle, rgba(255,255,240,1) 0%, rgba(255,255,210,0.5) 40%, transparent 70%);
+  box-shadow: 0 0 4px 1px rgba(255,255,220,0.6);
   animation: spTwinkle ease-in-out infinite;
 }
 
@@ -307,7 +318,7 @@ button, .toolbar-btn, .segment-btn, .top-btn {
   font-size: 13px;
   font-weight: 400;
   font-style: italic;
-  color: var(--text-muted);
+  color: rgba(242, 236, 224, 0.65);
   letter-spacing: 0.08em;
 }
 
@@ -456,7 +467,7 @@ button, .toolbar-btn, .segment-btn, .top-btn {
   -webkit-backdrop-filter: blur(10px);
   font-size: 11px;
   font-weight: 600;
-  color: var(--accent-gold);
+  color: rgba(255, 255, 255, 0.9);
   letter-spacing: 0.1em;
   text-transform: uppercase;
 }
@@ -499,8 +510,8 @@ button, .toolbar-btn, .segment-btn, .top-btn {
   min-height: 44px;
 }
 
-.toolbar-btn.active { color: var(--accent-gold); }
-.toolbar-btn:active { color: var(--accent-gold-bright); }
+.toolbar-btn.active { color: rgba(255, 255, 255, 0.95); }
+.toolbar-btn:active { color: #fff; }
 
 .toolbar-btn-icon { font-size: 22px; line-height: 1; }
 
@@ -635,7 +646,7 @@ button, .toolbar-btn, .segment-btn, .top-btn {
 
 .segment-btn.active {
   background: var(--accent-gold-dim);
-  color: var(--accent-gold-bright);
+  color: rgba(255, 255, 255, 0.95);
 }
 
 /* Slider controls */
@@ -853,132 +864,67 @@ button, .toolbar-btn, .segment-btn, .top-btn {
 }
 
 /* ═══════════════════════════════════════
-   ZOOM CONTROLS
+   ZOOM PILL  (iPhone camera style)
 ═══════════════════════════════════════ */
-.zoom-controls {
+.zoom-pill {
   position: fixed;
-  /* 96px clears the ~76px button content + safe-area reliably on all iPhones */
-  bottom: calc(96px + max(0px, env(safe-area-inset-bottom)));
-  left: 0; right: 0;
+  bottom: calc(104px + max(0px, env(safe-area-inset-bottom)));
+  left: 50%;
+  transform: translateX(-50%);
   display: flex;
-  flex-direction: column;
   align-items: center;
-  gap: 10px;
-  z-index: 52; /* above toolbar (50) so touches reach buttons */
-  pointer-events: none;
-}
-
-/* Single pill — matches iPhone camera zoom style */
-.zoom-presets {
-  display: flex;
-  gap: 0;
-  pointer-events: auto;
-  background: rgba(0, 0, 0, 0.55);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
+  background: rgba(0, 0, 0, 0.52);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
   border-radius: 100px;
   padding: 3px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  transition: opacity 0.35s ease;
+  z-index: 52;
+  pointer-events: auto;
 }
 
 .zoom-btn {
-  min-width: 48px;
-  height: 32px;
-  padding: 0 12px;
-  border-radius: 100px;
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
   border: none;
-  background: transparent;
-  color: rgba(255, 255, 255, 0.8);
+  background: none;
+  color: rgba(255, 255, 255, 0.85);
   font-family: var(--font-ui);
   font-size: 14px;
   font-weight: 600;
   cursor: pointer;
-  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
   transition: background 0.18s, color 0.18s, transform 0.12s;
-  touch-action: manipulation; /* allow taps, prevent double-tap zoom */
-}
-
-.zoom-btn .zoom-x {
-  font-size: 10px;
-  opacity: 0.7;
-}
-
-.zoom-btn.active {
-  background: rgba(212, 165, 116, 0.28);
-  color: var(--accent-gold);
-}
-
-.zoom-btn:active {
-  transform: scale(0.93);
-}
-
-/* Wheel that appears on long press */
-.zoom-wheel-wrap {
-  width: calc(100% - 48px);
-  max-width: 340px;
-  pointer-events: auto;
-  animation: zoomWheelIn 0.2s cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-@keyframes zoomWheelIn {
-  from { opacity: 0; transform: translateY(8px) scale(0.95); }
-  to   { opacity: 1; transform: translateY(0) scale(1); }
-}
-
-.zoom-wheel-track {
-  position: relative;
-  height: 36px;
-  background: rgba(0, 0, 0, 0.55);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border-radius: 100px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  overflow: visible;
-}
-
-.zoom-wheel-fill {
-  position: absolute;
-  left: 0; top: 0; bottom: 0;
-  background: rgba(212, 165, 116, 0.15);
-  border-radius: 100px;
-  pointer-events: none;
-}
-
-.zoom-wheel-knob {
-  position: absolute;
-  top: 50%;
-  transform: translate(-50%, -50%);
-  width: 44px;
-  height: 44px;
-  border-radius: 50%;
-  background: var(--accent-gold);
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 2px 12px rgba(0,0,0,0.4);
-  pointer-events: none;
-  transition: transform 0s; /* disable transition while dragging */
+  flex-shrink: 0;
+  -webkit-tap-highlight-color: transparent;
 }
 
-.zoom-wheel-value {
-  font-family: var(--font-ui);
+.zoom-btn .zoom-x {
   font-size: 11px;
-  font-weight: 700;
-  color: #0a0a0f;
-  letter-spacing: -0.02em;
-  white-space: nowrap;
+  font-weight: 400;
+  opacity: 0.75;
 }
 
-/* Landscape: zoom stays bottom-left, clear of right sidebar */
+.zoom-btn.active {
+  background: rgba(255, 214, 0, 0.22);
+  color: #ffd600;
+}
+
+.zoom-btn:active {
+  transform: scale(0.88);
+}
+
+/* Landscape: pill moves to bottom-left clear of right sidebar */
 @media (orientation: landscape) and (max-height: 500px) {
-  .zoom-controls {
-    bottom: 14px;
-    left: max(12px, env(safe-area-inset-left));
-    right: calc(80px + max(0px, env(safe-area-inset-right)));
-    top: auto;
-    flex-direction: column;
-    align-items: flex-start;
+  .zoom-pill {
+    bottom: max(14px, env(safe-area-inset-bottom));
+    left: max(14px, env(safe-area-inset-left));
+    right: auto;
+    transform: none;
   }
-  .zoom-presets { flex-direction: row; }
-  .zoom-wheel-wrap { width: min(260px, 60vw); max-width: none; }
 }
