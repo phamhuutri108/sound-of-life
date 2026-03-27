@@ -329,7 +329,9 @@ function animationLoop(now) {
 
   // Detection (throttled)
   const activeBackend = getSmartBackend();
-  const activeInterval = activeBackend === 'yolo' ? BASE_DETECTION_INTERVAL : (BASE_DETECTION_INTERVAL + 40);
+  const activeInterval = activeBackend === 'mediapipe'
+    ? BASE_DETECTION_INTERVAL
+    : (BASE_DETECTION_INTERVAL + 40);
   if (now - lastDetectionTime > activeInterval) {
     lastDetectionTime = now;
 
