@@ -23,8 +23,30 @@
        SPLASH SCREEN
   ═══════════════════════════════════════ -->
   <div class="splash" id="splash">
+
+    <!-- Kodama spirits (Princess Mononoke tree spirits) -->
+    <div class="kodama-layer" aria-hidden="true">
+      <div class="kodama k1"></div>
+      <div class="kodama k2"></div>
+      <div class="kodama k3"></div>
+      <div class="kodama k4"></div>
+      <div class="kodama k5"></div>
+      <div class="kodama k6"></div>
+    </div>
+
+    <!-- Floating sparkle particles -->
+    <div class="sparkle-layer" aria-hidden="true">
+      <div class="sp sp1"></div><div class="sp sp2"></div><div class="sp sp3"></div>
+      <div class="sp sp4"></div><div class="sp sp5"></div><div class="sp sp6"></div>
+      <div class="sp sp7"></div><div class="sp sp8"></div><div class="sp sp9"></div>
+      <div class="sp sp10"></div><div class="sp sp11"></div><div class="sp sp12"></div>
+    </div>
+
+    <!-- Blue-purple mist -->
+    <div class="splash-mist" aria-hidden="true"></div>
+
     <div class="splash-title" id="txt-app-title">Sound of Life</div>
-    <div class="splash-subtitle" id="txt-tagline">Bông ơi Bông à, lên ăn cơm vàng, cơm bạc nhà ta</div>
+    <div class="splash-subtitle" id="txt-tagline">Bống Bống Bông Bông, lên ăn cơm vàng, cơm bạc nhà ta</div>
     <button class="splash-start-btn" id="startBtn">
       <span id="txt-start">Start</span>
     </button>
@@ -94,6 +116,12 @@
        TOP BAR
   ═══════════════════════════════════════ -->
   <div class="top-bar" id="topBar" style="display:none">
+    <!-- Back: chevron-left icon -->
+    <button class="top-btn" id="backBtn" title="Back to home">
+      <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="11,4 6,9 11,14"/>
+      </svg>
+    </button>
     <!-- Flip: rotate icon -->
     <button class="top-btn" id="flipBtn" title="Flip camera">
       <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
@@ -101,10 +129,7 @@
         <polyline points="16,1 16,5.5 11.5,5.5"/>
       </svg>
     </button>
-    <div class="top-bar-center">
-      <div class="mode-badge" id="modeBadge">PHOTO</div>
-      <div class="ai-badge" id="aiBadge">⏳ AI</div>
-    </div>
+    <div class="mode-badge" id="modeBadge">PHOTO</div>
     <!-- Settings: sliders icon -->
     <button class="top-btn" id="settingsBtn" title="Settings">
       <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round">
@@ -252,9 +277,9 @@
         </label>
       </div>
       <div class="toggle-row">
-        <span class="toggle-label" id="txt-show-grid">Grid lines (Kẻ ô)</span>
+        <span class="toggle-label" id="txt-show-grid">Staff lines (Kẻ nhạc)</span>
         <label class="toggle-switch">
-          <input type="checkbox" id="toggleGrid">
+          <input type="checkbox" id="toggleGrid" checked>
           <span class="toggle-track"><span class="toggle-knob"></span></span>
         </label>
       </div>

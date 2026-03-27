@@ -1,7 +1,7 @@
 export const I18N = {
   en: {
     'app-title': 'Sound of Life',
-    'tagline': 'Bông ơi Bông à, lên ăn cơm vàng, cơm bạc nhà ta',
+    'tagline': 'Bống Bống Bông Bông, lên ăn cơm vàng, cơm bạc nhà ta',
     'start': 'Start',
     'loading': 'Loading edge detection…',
     'camera-error': 'Camera access required.\nPlease allow camera permissions and reload.',
@@ -35,7 +35,7 @@ export const I18N = {
   },
   vi: {
     'app-title': 'Âm Thanh Cuộc Sống',
-    'tagline': 'Bông ơi Bông à,lên ăn cơm vàng, cơm bạc nhà ta',
+    'tagline': 'Bống Bống Bông Bông, lên ăn cơm vàng, cơm bạc nhà ta',
     'start': 'Bắt đầu',
     'loading': 'Đang tải nhận diện cạnh…',
     'camera-error': 'Cần quyền truy cập camera.\nVui lòng cho phép camera và tải lại trang.',

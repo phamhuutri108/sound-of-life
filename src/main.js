@@ -107,6 +107,25 @@ function switchMode() {
   applyMode(newMode);
 }
 
+function goHome() {
+  // Stop playback and release audio
+  if (isPlaying) {
+    isPlaying = false;
+    releaseAllInstruments();
+  }
+  // Reset photo state
+  doRetakePhoto();
+
+  // Hide camera UI
+  document.getElementById('topBar').style.display = 'none';
+  document.getElementById('bottomToolbar').style.display = 'none';
+  document.getElementById('zoomControls').style.display = 'none';
+  document.getElementById('cameraView').classList.remove('active');
+
+  // Show mode selection
+  document.getElementById('modeSelect').classList.remove('hidden');
+}
+
 function selectMode(mode) {
   document.getElementById('modeSelect').classList.add('hidden');
   document.getElementById('cameraView').classList.add('active');
@@ -234,10 +253,7 @@ function animationLoop(now) {
   }
 
   renderStaff(curScanX, lastDetectionResults, staffData, isPlaying);
-  if (isSmartReady()) {
-    drawDetections(ctx, staffData);
-    updateAIBadge();
-  }
+  if (isSmartReady()) drawDetections(ctx, staffData);
 }
 
 let loopStarted = false;
@@ -259,14 +275,6 @@ function onStart() {
   }, 350);
 }
 
-function updateAIBadge() {
-  const badge = document.getElementById('aiBadge');
-  if (!badge) return;
-  if (isSmartReady()) {
-    badge.textContent = '✦ AI';
-    badge.classList.add('ready');
-  }
-}
 
 /* ═══════════════════════════════════════════════════════════════
    ZOOM
@@ -401,6 +409,7 @@ function wireUI() {
   document.getElementById('modeCardLive').addEventListener('click', () => selectMode('live'));
 
   // Top bar
+  document.getElementById('backBtn').addEventListener('click', goHome);
   document.getElementById('flipBtn').addEventListener('click', flipCamera);
   document.getElementById('settingsBtn').addEventListener('click', openSettings);
 

@@ -7,7 +7,7 @@ export { canvas, ctx };
 
 // Overlay visibility flags (toggled via settings)
 export let showClef = true;
-export let showGrid = false;
+export let showGrid = true;
 
 export function setShowClef(v) { showClef = v; }
 export function setShowGrid(v) { showGrid = v; }
@@ -83,7 +83,7 @@ export function drawTrebleClef(sd) {
   const clefX = sd.staffLeft - 4;
   const clefY = (sd.staffTop + sd.staffBottom) / 2;
   const clefSize = (sd.staffBottom - sd.staffTop) * 1.0;
-  ctx.fillStyle = 'rgba(185, 225, 160, 0.62)';
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.78)';
   ctx.font = `${clefSize}px serif`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
@@ -152,8 +152,7 @@ export function renderStaff(scanX, detectionResults, staffData, isPlaying) {
   if (!staffData) return;
   const sd = staffData;
   ctx.clearRect(0, 0, sd.displayWidth, sd.displayHeight);
-  if (showGrid) drawGrid(sd);
-  drawStaffLines(sd);
+  if (showGrid) drawStaffLines(sd);
   if (showClef) drawTrebleClef(sd);
   if (isPlaying && scanX >= sd.staffLeft && scanX <= sd.staffRight) {
     drawScanLine(scanX, sd);
