@@ -36,6 +36,7 @@ export const I18N = {
     'a2hs-title': 'Add to Home Screen',
     'a2hs-ios': 'Tap the share button, then "Add to Home Screen"',
     'a2hs-android': 'Install the app for the best experience',
+    'a2hs-android-manual': 'Tap the menu then "Add to Home Screen"',
     'a2hs-install': 'Install',
   },
   vi: {
@@ -75,6 +76,7 @@ export const I18N = {
     'a2hs-title': 'Thêm vào Màn hình chính',
     'a2hs-ios': 'Nhấn nút chia sẻ, rồi chọn "Thêm vào Màn hình chính"',
     'a2hs-android': 'Cài ứng dụng để có trải nghiệm tốt nhất',
+    'a2hs-android-manual': 'Nhấn menu trình duyệt rồi chọn "Thêm vào Màn hình chính"',
     'a2hs-install': 'Cài đặt',
   },
 };

@@ -37,6 +37,11 @@ let photoImgEl = null;
 let sensitivity = 70;
 let staffData = null;
 
+// A2HS state — must be declared before wireUI() runs
+let _deferredInstallPrompt = null;
+let _a2hsPlatform = null;
+const SHARE_SVG = `<svg class="a2hs-share-svg" width="13" height="13" viewBox="0 0 13 13" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="6.5" y1="1" x2="6.5" y2="8.5"/><polyline points="4,3.5 6.5,1 9,3.5"/><path d="M2 6.5v4a1 1 0 001 1h7a1 1 0 001-1v-4"/></svg>`;
+
 /**
  * Compute the actual pixel bounds of a photo rendered with `background-size: contain`
  * inside #cameraView. Returns { x, y, w, h } in CSS pixels, or null if unavailable.
@@ -863,19 +868,17 @@ if (document.readyState === 'loading') {
 /* ═══════════════════════════════════════════════════════════════
    ADD TO HOME SCREEN
 ═══════════════════════════════════════════════════════════════ */
-let _deferredInstallPrompt = null;
-let _a2hsPlatform = null;
-
-// iOS share button SVG (inline, matches Apple's share icon style)
-const SHARE_SVG = `<svg class="a2hs-share-svg" width="13" height="13" viewBox="0 0 13 13" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="6.5" y1="1" x2="6.5" y2="8.5"/><polyline points="4,3.5 6.5,1 9,3.5"/><path d="M2 6.5v4a1 1 0 001 1h7a1 1 0 001-1v-4"/></svg>`;
-
 function updateA2HSHint() {
   const hint = document.getElementById('a2hsHint');
   if (!hint || !_a2hsPlatform) return;
   if (_a2hsPlatform === 'ios') {
     hint.innerHTML = `${SHARE_SVG} <span>${t('a2hs-ios')}</span>`;
-  } else {
+  } else if (_a2hsPlatform === 'android') {
+    // Native install prompt available — show just the description
     hint.textContent = t('a2hs-android');
+  } else {
+    // android-manual: no native prompt, guide user via browser menu
+    hint.innerHTML = `<span class="a2hs-menu-dots">⋮</span> <span>${t('a2hs-android-manual')}</span>`;
   }
 }
 
@@ -884,7 +887,7 @@ function showA2HSBanner(platform) {
   if (!banner) return;
   _a2hsPlatform = platform;
   const installBtn = document.getElementById('a2hsInstallBtn');
-  if (platform === 'android' && installBtn) installBtn.style.display = 'block';
+  if (installBtn) installBtn.style.display = platform === 'android' ? 'block' : 'none';
   updateA2HSHint();
   banner.classList.remove('hidden');
 }
@@ -894,15 +897,20 @@ function initA2HS() {
   if (localStorage.getItem('a2hs-dismissed')) return;
   const ua = navigator.userAgent;
   const isIOS = /iPad|iPhone|iPod/.test(ua) && !window.MSStream;
-  if (isIOS) showA2HSBanner('ios');
-  // Android/Chrome: handled by beforeinstallprompt below
+  const isAndroid = /Android/.test(ua);
+  if (isIOS) {
+    showA2HSBanner('ios');
+  } else if (isAndroid) {
+    // Show immediately with manual instruction; upgrade to install button if prompt fires
+    showA2HSBanner('android-manual');
+  }
 }
 
 window.addEventListener('beforeinstallprompt', e => {
   e.preventDefault();
   _deferredInstallPrompt = e;
   if (!localStorage.getItem('a2hs-dismissed') && !window.matchMedia('(display-mode: standalone)').matches) {
-    showA2HSBanner('android');
+    showA2HSBanner('android'); // upgrade to native install button
   }
 });
 
