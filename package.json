@@ -1,0 +1,16 @@
+{
+  "name": "sound-of-life",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "tone": "^14.8.49"
+  },
+  "devDependencies": {
+    "vite": "^5.4.0"
+  }
+}
