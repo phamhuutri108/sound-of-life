@@ -1,6 +1,6 @@
-// Detection: COCO-SSD (smart) with brightness+Canny fallback
+// Detection: MediaPipe Segmentation (smart) with brightness+Canny fallback
 
-import { isSmartReady, runInference, getSmartResults } from './smartDetection.js';
+import { isSmartReady, runInference, getEdgeTransitions } from './smartDetection.js';
 
 export let cvReady = false;
 
@@ -16,7 +16,7 @@ window.onOpenCVReady = onOpenCVReady;
 
 export const noteCooldowns = {};
 
-export function shouldTriggerNote(noteId, now, cooldownMs = 180) {
+export function shouldTriggerNote(noteId, now, cooldownMs = 250) {
   const last = noteCooldowns[noteId] || 0;
   if (now - last < cooldownMs) return false;
   noteCooldowns[noteId] = now;
@@ -32,15 +32,12 @@ function captureToDetectionCanvas({ appMode, photoImgEl, staffData }) {
   const video = document.getElementById('cameraVideo');
 
   if (appMode === 'photo' && photoImgEl) {
-    // Match display aspect ratio so contain-fit placement is identical in both spaces,
-    // making scaleX == scaleY and staff positions map correctly to photo pixels.
     const dispW = staffData?.displayWidth  || 320;
     const dispH = staffData?.displayHeight || 240;
     const W = 320;
     const H = Math.max(1, Math.round(W * dispH / dispW));
     detectionCanvas.width  = W;
     detectionCanvas.height = H;
-    // Draw photo in contain mode (same as CSS background-size:contain)
     const iw = photoImgEl.naturalWidth  || photoImgEl.width;
     const ih = photoImgEl.naturalHeight || photoImgEl.height;
     const scale = iw && ih ? Math.min(W / iw, H / ih) : 1;
@@ -56,7 +53,6 @@ function captureToDetectionCanvas({ appMode, photoImgEl, staffData }) {
     };
   }
 
-  // Live camera: simple 320×240 downscale
   const W = 320, H = 240;
   detectionCanvas.width = W;
   detectionCanvas.height = H;
@@ -151,47 +147,75 @@ function detectEdgesAtPositions(detCanvas, notePositions, scanXScaled) {
   }
 }
 
-/* ── Main export ── */
-
-export function detectObjects({ appMode, photoDataURL, photoImgEl, staffData, scanX, sensitivity }) {
-  if (!staffData) return null;
-
-  // ── Smart path: COCO-SSD ready ──────────────────────────
-  if (isSmartReady()) {
-    // Kick off async inference (throttled internally); result cached
-    const video = document.getElementById('cameraVideo');
-    const source = (appMode === 'photo' && photoImgEl) ? photoImgEl : video;
-    runInference(source); // fire-and-forget
-
-    const smart = getSmartResults(staffData, scanX);
-    if (smart) return smart;
-    // smart returns null when no boxes cached yet → fall through
-  }
-
-  // ── Fallback: brightness + Canny ────────────────────────
-  const cap = captureToDetectionCanvas({ appMode, photoImgEl, staffData });
-  if (!cap) return null;
-
-  const { canvas: detCanvas, scaleX, scaleY } = cap;
-  const imageData = detectionCtx.getImageData(0, 0, detCanvas.width, detCanvas.height);
-  const frameData = { imageData, width: detCanvas.width, height: detCanvas.height };
-
-  const scanXScaled = scanX * scaleX;
-  const notePositions = staffData.positions.map(pos => ({
-    ...pos,
-    yScaled: pos.y * scaleY,
-  }));
-
-  const brightness = detectBrightnessAtPositions(frameData, notePositions, scanXScaled, sensitivity);
-  const edges = detectEdgesAtPositions(detCanvas, notePositions, scanXScaled);
-
-  return notePositions.map((pos, i) => {
-    const byB = brightness[i];
-    const byE = edges ? edges[i] : false;
-    return {
-      detected: byB || byE,
-      confidence: (byB ? 0.5 : 0) + (byE ? 0.5 : 0),
-      position: pos,
-    };
-  });
+/**
+ * Map Y position (display) → index in scale (0–12)
+ * Lower Y (bottom) = low index (low note)
+ * Higher Y (top) = high index (high note)
+ */
+function yToNoteIndex(y, staffData) {
+  const { staffTop, staffBottom } = staffData;
+  // Clamp Y to the staff area
+  const clampedY = Math.max(staffTop, Math.min(staffBottom, y));
+  // Invert: staffBottom = low note (index 0), staffTop = high note (index 12)
+  const ratio = 1 - ((clampedY - staffTop) / (staffBottom - staffTop));
+  return Math.round(ratio * 12);
 }
+
+/* ── Main export ── */
+export function detectObjects({ appMode, photoImgEl, staffData, scanX, sensitivity }) {
+    if (!staffData) return null;
+  
+    // ── Smart path: MediaPipe segmentation ──
+    if (isSmartReady()) {
+      const video = document.getElementById('cameraVideo');
+      const source = (appMode === 'photo' && photoImgEl) ? photoImgEl : video;
+      if (source) {
+          runInference(source); // fire-and-forget
+      }
+  
+      const transitions = getEdgeTransitions(staffData, scanX);
+      if (transitions) {
+        // Return new format: array of {y, confidence, noteIndex}
+        return transitions.map(t => ({
+          detected: true,
+          confidence: t.confidence,
+          y: t.y,
+          noteIndex: yToNoteIndex(t.y, staffData),
+        }));
+      }
+      // Fall through if mask is not ready yet
+    }
+  
+    // ── Fallback: brightness + Canny (original logic) ──
+    const cap = captureToDetectionCanvas({ appMode, photoImgEl, staffData });
+    if (!cap) return null;
+  
+    const { canvas: detCanvas, scaleX, scaleY } = cap;
+    const imageData = detectionCtx.getImageData(0, 0, detCanvas.width, detCanvas.height);
+    const frameData = { imageData, width: detCanvas.width, height: detCanvas.height };
+  
+    const scanXScaled = scanX * scaleX;
+    const notePositions = staffData.positions.map(pos => ({
+      ...pos,
+      yScaled: pos.y * scaleY,
+    }));
+  
+    const brightness = detectBrightnessAtPositions(frameData, notePositions, scanXScaled, sensitivity);
+    const edges = detectEdgesAtPositions(detCanvas, notePositions, scanXScaled);
+  
+    const fixedResults = notePositions.map((pos, i) => {
+      const byB = brightness[i];
+      const byE = edges ? edges[i] : false;
+      return {
+        detected: byB || byE,
+        confidence: (byB ? 0.5 : 0) + (byE ? 0.5 : 0),
+      };
+    });
+
+    // Wrap fallback results to be compatible with new format
+    return fixedResults.map((r, i) => ({
+      ...r,
+      y: staffData.positions[i].y,
+      noteIndex: i,
+    }));
+  }

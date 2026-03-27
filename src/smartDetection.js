@@ -1,129 +1,149 @@
-// Smart object detection using COCO-SSD (TensorFlow.js)
-// Detects real objects (keyboard, phone, plant, book…) and returns
-// bounding boxes in normalised [0–1] coordinates.
-// The scan line then triggers notes only where actual objects live.
+import { ImageSegmenter, FilesetResolver } from '@mediapipe/tasks-vision';
 
-import * as cocoSsd from '@tensorflow-models/coco-ssd';
+let segmenter = null;
+let loading = false;
+let lastTime = 0;
 
-let model = null;
-let modelLoading = false;
+// Cache mask each frame
+let cachedMask = null;     // Float32Array 0.0–1.0
+let maskW = 0, maskH = 0;
+const INFERENCE_INTERVAL = 150; // ms
 
-// Normalised bounding boxes from the last inference
-// Each entry: { x1, y1, x2, y2, class, score }
-let cachedBoxes = [];
+export function isSmartReady() {
+  return !!segmenter;
+}
 
-// Only run inference this often (ms) — ~1 fps is enough; visual loop stays 60 fps
-const INFERENCE_INTERVAL = 900;
-let lastInferenceTime = 0;
-
-/* ── Model loading ─────────────────────────────────────── */
-
-export function isSmartReady() { return !!model; }
-export function isSmartLoading() { return modelLoading; }
+export function isSmartLoading() {
+  return loading;
+}
 
 export async function loadSmartModel() {
-  if (model || modelLoading) return;
-  modelLoading = true;
+  if (segmenter || loading) return;
+  loading = true;
   try {
-    // lite_mobilenet_v2 is fastest on mobile (~3 MB weights)
-    model = await cocoSsd.load({ base: 'lite_mobilenet_v2' });
+    const vision = await FilesetResolver.forVisionTasks(
+      'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision/wasm'
+    );
+    segmenter = await ImageSegmenter.createFromOptions(vision, {
+      baseOptions: {
+        modelAssetPath: 'https://storage.googleapis.com/mediapipe-models/image_segmenter/deeplab_v3/float32/1/deeplab_v3.tflite',
+        delegate: 'GPU',
+      },
+      runningMode: 'VIDEO',
+      outputCategoryMask: false,
+      outputConfidenceMasks: true,
+    });
   } catch (e) {
-    console.warn('COCO-SSD load failed:', e);
+    console.warn('MediaPipe segmentation load failed:', e);
   } finally {
-    modelLoading = false;
+    loading = false;
   }
 }
-
-/* ── Inference ─────────────────────────────────────────── */
 
 export async function runInference(imageSource) {
-  if (!model) return;
+  if (!segmenter) return;
+  // Throttle
   const now = Date.now();
-  if (now - lastInferenceTime < INFERENCE_INTERVAL) return;
-  lastInferenceTime = now;
+  if (now - lastTime < INFERENCE_INTERVAL) return;
+  lastTime = now;
 
   try {
-    // Limit to 10 detections; minimum confidence 0.25
-    const predictions = await model.detect(imageSource, 10, 0.25);
+    const isVideo = imageSource instanceof HTMLVideoElement;
+    // If video is not ready, skip
+    if (isVideo && imageSource.readyState < 2) return;
 
-    // Get natural dimensions of the source
-    const imgW =
-      imageSource.videoWidth  ||
-      imageSource.naturalWidth ||
-      imageSource.width  || 1;
-    const imgH =
-      imageSource.videoHeight  ||
-      imageSource.naturalHeight ||
-      imageSource.height || 1;
-
-    // Normalise bbox to [0–1] range
-    cachedBoxes = predictions.map(p => ({
-      x1: p.bbox[0] / imgW,
-      y1: p.bbox[1] / imgH,
-      x2: (p.bbox[0] + p.bbox[2]) / imgW,
-      y2: (p.bbox[1] + p.bbox[3]) / imgH,
-      class: p.class,
-      score: p.score,
-    }));
-  } catch (_) {
-    // silently ignore inference errors
-  }
-}
-
-/* ── Per-frame query (called at 60 fps, uses cached boxes) ── */
-
-export function getSmartResults(staffData, scanX) {
-  if (!staffData || cachedBoxes.length === 0) return null;
-
-  const W = staffData.displayWidth;
-  const H = staffData.displayHeight;
-  const xNorm = scanX / W;
-
-  return staffData.positions.map(pos => {
-    const yNorm = pos.y / H;
-
-    // Find the highest-confidence box that contains (xNorm, yNorm)
-    let bestScore = 0;
-    for (const box of cachedBoxes) {
-      if (
-        xNorm >= box.x1 && xNorm <= box.x2 &&
-        yNorm >= box.y1 && yNorm <= box.y2
-      ) {
-        if (box.score > bestScore) bestScore = box.score;
+    const consumeResult = (result) => {
+      const masks = result?.confidenceMasks;
+      if (masks && masks.length > 0) {
+        const bgMask = masks[0];
+        const w = bgMask.width;
+        const h = bgMask.height;
+        if (!cachedMask || cachedMask.length !== w * h) {
+          cachedMask = new Float32Array(w * h);
+        }
+        maskW = w;
+        maskH = h;
+        const bgData = typeof bgMask.getAsFloat32Array === 'function'
+          ? bgMask.getAsFloat32Array()
+          : bgMask.data;
+        for (let i = 0; i < bgData.length; i++) {
+          cachedMask[i] = 1.0 - bgData[i];
+        }
       }
+      if (typeof result?.close === 'function') result.close();
+    };
+
+    if (isVideo) {
+      segmenter.segmentForVideo(imageSource, now, consumeResult);
+    } else {
+      const result = segmenter.segment(imageSource);
+      consumeResult(result);
     }
 
-    return {
-      detected:    bestScore > 0,
-      confidence:  bestScore,
-      position:    pos,
-    };
-  });
+  } catch (e) {
+    // silently ignore
+  }
 }
 
-/* ── Draw bounding boxes on staff canvas (optional debug) ── */
+/**
+ * FIND TRANSITIONS (object edges) along the scanX column.
+ *
+ * Returns an array of { y (display coords), confidence }
+ * Only returns the point of TRANSITION from background to foreground (rising edge),
+ * NOT pixels inside the object.
+ */
+export function getEdgeTransitions(staffData, scanX) {
+  if (!cachedMask || maskW === 0) return null;
 
-export function drawDetections(ctx, staffData) {
-  if (!staffData || cachedBoxes.length === 0) return;
   const W = staffData.displayWidth;
   const H = staffData.displayHeight;
 
-  ctx.lineWidth = 1.5;
-  ctx.font = '11px sans-serif';
-  ctx.textBaseline = 'top';
+  // Map scanX from display coords → mask coords
+  const mx = Math.round((scanX / W) * maskW);
+  if (mx < 0 || mx >= maskW) return null;
 
-  for (const box of cachedBoxes) {
-    const x = box.x1 * W, y = box.y1 * H;
-    const w = (box.x2 - box.x1) * W;
-    const h = (box.y2 - box.y1) * H;
-    const alpha = 0.3 + box.score * 0.5;
-
-    ctx.strokeStyle = `rgba(212,165,116,${alpha})`;
-    ctx.setLineDash([4, 3]);
-    ctx.strokeRect(x, y, w, h);
-    ctx.setLineDash([]);
-
-    ctx.fillStyle = `rgba(212,165,116,${alpha})`;
-    ctx.fillText(box.class, x + 4, y + 3);
+  // Read a vertical column from the mask
+  const column = new Float32Array(maskH);
+  for (let y = 0; y < maskH; y++) {
+    column[y] = cachedMask[y * maskW + mx];
   }
+
+  // Smooth the column (low-pass filter) to reduce noise
+  const smoothed = new Float32Array(maskH);
+  const kernelR = 2;
+  for (let y = 0; y < maskH; y++) {
+    let sum = 0, count = 0;
+    for (let dy = -kernelR; dy <= kernelR; dy++) {
+      const yy = y + dy;
+      if (yy >= 0 && yy < maskH) { sum += column[yy]; count++; }
+    }
+    smoothed[y] = sum / count;
+  }
+
+  // Find transitions: where the mask crosses a threshold
+  const THRESHOLD = 0.4;
+  const transitions = [];
+  let prevAbove = smoothed[0] > THRESHOLD;
+
+  for (let y = 1; y < maskH; y++) {
+    const curAbove = smoothed[y] > THRESHOLD;
+    if (curAbove && !prevAbove) {
+      // Rising edge — object starts
+      // Confidence = sharpness of the transition (gradient)
+      const gradient = Math.abs(smoothed[y] - smoothed[y - 1]);
+      const confidence = Math.min(1.0, gradient * 3 + smoothed[y] * 0.5);
+      transitions.push({
+        y: (y / maskH) * H,  // convert back to display coords
+        confidence: Math.max(0.3, confidence),
+      });
+    }
+    prevAbove = curAbove;
+  }
+
+  return transitions.length > 0 ? transitions : null;
+}
+
+export function drawDetections(ctx, staffData) {
+  // Optional: draw a faint mask overlay (debug mode)
+  // Or draw the transition points as bright dots
 }

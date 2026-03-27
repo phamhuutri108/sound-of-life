@@ -341,13 +341,19 @@ function animationLoop(now) {
         sensitivity,
       });
 
-      // Trigger notes — cap at MAX_NOTES_PER_PASS to prevent audio overload
+      // Trigger notes from edge transitions
       if (lastDetectionResults && isAudioReady()) {
         let fired = 0;
-        for (let i = 0; i < lastDetectionResults.length && fired < MAX_NOTES_PER_PASS; i++) {
-          const result = lastDetectionResults[i];
-          if (result.detected && shouldTriggerNote(`note_${i}`, now)) {
-            playNote(getNoteForPosition(i), confidenceToVelocity(result.confidence));
+        for (const result of lastDetectionResults) {
+          if (fired >= MAX_NOTES_PER_PASS) break;
+          if (!result.detected) continue;
+
+          // Use noteIndex (from Y position) instead of fixed index
+          const noteIdx = result.noteIndex !== undefined ? result.noteIndex : 0;
+          const noteId = `note_y_${Math.round(result.y || 0)}`;
+
+          if (shouldTriggerNote(noteId, now, 250)) {
+            playNote(getNoteForPosition(noteIdx), confidenceToVelocity(result.confidence));
             fired++;
           }
         }

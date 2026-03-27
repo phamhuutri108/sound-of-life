@@ -157,18 +157,29 @@ export function renderStaff(scanX, detectionResults, staffData, isPlaying) {
   if (!staffData) return;
   const sd = staffData;
   ctx.clearRect(0, 0, sd.displayWidth, sd.displayHeight);
+
+  // Staff lines are still drawn as a visual guide
   if (showGrid) drawStaffLines(sd);
   if (showClef) drawTrebleClef(sd);
+
   if (isPlaying && scanX >= sd.staffLeft && scanX <= sd.staffRight) {
     drawScanLine(scanX, sd);
   }
+
   if (detectionResults) {
-    sd.positions.forEach((pos, i) => {
-      const r = detectionResults[i];
-      drawNoteIndicator(scanX, pos.y, r?.detected, r?.confidence);
+    // Draw passive dots at the 13 fixed staff positions
+    sd.positions.forEach(pos => {
+      drawNoteIndicator(scanX, pos.y, false, 0);
     });
+
+    // Draw ACTIVE notes at the actual Y position of the transitions
+    for (const r of detectionResults) {
+      if (r.detected && r.y !== undefined) {
+        drawNoteIndicator(scanX, r.y, true, r.confidence);
+      }
+    }
   } else {
-    // draw passive indicators
+    // If no results, just draw all passive indicators
     sd.positions.forEach(pos => {
       drawNoteIndicator(scanX, pos.y, false, 0);
     });
