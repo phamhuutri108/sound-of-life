@@ -24,6 +24,7 @@ import {
   cvReady,
   noteCooldowns, shouldTriggerNote,
   detectObjects as _detectObjects,
+  loadOpenCVIfNeeded,
 } from './detection.js';
 import {
   loadSmartModel,
@@ -170,11 +171,12 @@ async function selectMode(mode) {
   applyMode(mode);
   const cameraStarted = await startCamera(_cameraFacing);
 
-  // Prioritize camera readiness first; load segmentation after UI becomes interactive.
+  // Prioritize camera readiness first.
+  // 3 s delay lets RAF render a few frames and avoids WASM compile competing
+  // with the first animation frames on slow mobile devices.
   if (cameraStarted) {
-    setTimeout(() => {
-      loadSmartModel();
-    }, 120);
+    const modelDelay = mode === 'live' ? 3000 : 800;
+    setTimeout(() => loadSmartModel(), modelDelay);
   }
 
   initCameraZoom();
@@ -182,12 +184,13 @@ async function selectMode(mode) {
   if (staffData) scanX = staffData.staffLeft;
   startAnimationLoop();
 
-  // Show opencv status briefly if not ready yet; auto-hide after 4s
-  if (!cvReady) {
+  // OpenCV is only useful for photo-mode fallback — load it lazily.
+  if (mode === 'photo') {
     const el = document.getElementById('opencvStatus');
     el.style.display = '';
     el.classList.remove('loaded');
-    setTimeout(() => el.classList.add('loaded'), 4000);
+    loadOpenCVIfNeeded();
+    setTimeout(() => el.classList.add('loaded'), 5000);
   }
 }
 

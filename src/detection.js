@@ -1,8 +1,9 @@
 // Detection: MediaPipe Segmentation (smart) with brightness+Canny fallback
 
-import { isSmartReady, runInference, getEdgeTransitions } from './smartDetection.js';
+import { isSmartReady, isSmartLoading, runInference, getEdgeTransitions } from './smartDetection.js';
 
 export let cvReady = false;
+let _opencvLoadStarted = false;
 
 export function onOpenCVReady() {
   cvReady = true;
@@ -11,8 +12,22 @@ export function onOpenCVReady() {
   setTimeout(() => (el.style.display = 'none'), 900);
 }
 
-// Expose globally so the CDN script's onload attribute can call it
+// Expose globally so the dynamic script tag's onload can call it
 window.onOpenCVReady = onOpenCVReady;
+
+/**
+ * Lazily load OpenCV — called only when entering photo mode.
+ * Safe to call multiple times (no-op if already started).
+ */
+export function loadOpenCVIfNeeded() {
+  if (_opencvLoadStarted || cvReady) return;
+  _opencvLoadStarted = true;
+  const script = document.createElement('script');
+  script.src = 'https://docs.opencv.org/4.9.0/opencv.js';
+  script.async = true;
+  script.onload = () => window.onOpenCVReady && window.onOpenCVReady();
+  document.body.appendChild(script);
+}
 
 export const noteCooldowns = {};
 
@@ -186,7 +201,15 @@ export function detectObjects({ appMode, photoImgEl, staffData, scanX, sensitivi
       // Fall through if mask is not ready yet
     }
   
-    // ── Fallback: brightness + Canny (original logic) ──
+    // In live mode, MediaPipe is the only detection path. Skip the heavy
+    // OpenCV/brightness fallback entirely — it would block the main thread
+    // and the mask simply isn't available yet while the model loads.
+    if (appMode === 'live') return null;
+
+    // While MediaPipe is still loading, avoid triggering expensive CV work.
+    if (isSmartLoading()) return null;
+
+    // ── Fallback: brightness + Canny (photo mode only) ──
     const cap = captureToDetectionCanvas({ appMode, photoImgEl, staffData });
     if (!cap) return null;
   

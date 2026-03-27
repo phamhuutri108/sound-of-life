@@ -233,7 +233,7 @@ export async function loadSmartModel() {
   }
 }
 
-export async function runInference(imageSource, opts = {}) {
+export function runInference(imageSource, opts = {}) {
   if (!segmenter || !imageSource || !opts.staffData) return;
 
   const now = Date.now();
@@ -241,40 +241,57 @@ export async function runInference(imageSource, opts = {}) {
   lastInferenceTime = now;
   inferenceInFlight = true;
 
-  try {
-    const isVideo = imageSource instanceof HTMLVideoElement;
-    if (isVideo && imageSource.readyState < 2) return;
+  // Yield to browser first so RAF/UI can process before we do heavy work
+  setTimeout(() => {
+    try {
+      const isVideo = imageSource instanceof HTMLVideoElement;
+      if (isVideo && imageSource.readyState < 2) {
+        inferenceInFlight = false;
+        return;
+      }
 
-    const displayInfo = drawSourceToDisplayCanvas(
-      imageSource,
-      opts.staffData,
-      opts.appMode || 'live'
-    );
-    if (!displayInfo) return;
+      const displayInfo = drawSourceToDisplayCanvas(
+        imageSource,
+        opts.staffData,
+        opts.appMode || 'live'
+      );
+      if (!displayInfo) {
+        inferenceInFlight = false;
+        return;
+      }
 
-    const roiRect = computeRoiRect(opts.staffData, displayInfo.displayW, displayInfo.displayH);
-    const roiInfo = buildRoiCanvas(roiRect);
-    roiMap = {
-      roiRect,
-      targetW: roiInfo.targetW,
-      targetH: roiInfo.targetH,
-      displayToRoiScaleX: roiInfo.displayToRoiScaleX,
-      displayToRoiScaleY: roiInfo.displayToRoiScaleY,
-      displayW: displayInfo.displayW,
-      displayH: displayInfo.displayH,
-    };
+      const roiRect = computeRoiRect(opts.staffData, displayInfo.displayW, displayInfo.displayH);
+      const roiInfo = buildRoiCanvas(roiRect);
+      roiMap = {
+        roiRect,
+        targetW: roiInfo.targetW,
+        targetH: roiInfo.targetH,
+        displayToRoiScaleX: roiInfo.displayToRoiScaleX,
+        displayToRoiScaleY: roiInfo.displayToRoiScaleY,
+        displayW: displayInfo.displayW,
+        displayH: displayInfo.displayH,
+      };
 
-    const result = isVideo
-      ? segmenter.segmentForVideo(roiCanvas, now)
-      : segmenter.segment(roiCanvas);
-
-    readForegroundMask(result);
-    if (typeof result?.close === 'function') result.close();
-  } catch {
-    // keep silent in realtime loop
-  } finally {
-    inferenceInFlight = false;
-  }
+      if (isVideo) {
+        // Callback form = truly async, does NOT block main thread
+        segmenter.segmentForVideo(roiCanvas, now, (result) => {
+          try {
+            readForegroundMask(result);
+            if (typeof result?.close === 'function') result.close();
+          } catch { /* ignore */ }
+          inferenceInFlight = false;
+        });
+      } else {
+        // Photo: segment() is synchronous but only called once per capture, acceptable
+        const result = segmenter.segment(roiCanvas);
+        readForegroundMask(result);
+        if (typeof result?.close === 'function') result.close();
+        inferenceInFlight = false;
+      }
+    } catch {
+      inferenceInFlight = false;
+    }
+  }, 0);
 }
 
 function getColumnFromMask(scanX) {
