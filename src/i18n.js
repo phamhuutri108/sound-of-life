@@ -33,6 +33,10 @@ export const I18N = {
     'capture': 'Capture',
     'retake': 'Retake',
     'gallery': 'Gallery',
+    'a2hs-title': 'Add to Home Screen',
+    'a2hs-ios': 'Tap the share button, then "Add to Home Screen"',
+    'a2hs-android': 'Install the app for the best experience',
+    'a2hs-install': 'Install',
   },
   vi: {
     'app-title': 'Âm Thanh Cuộc Sống',
@@ -68,6 +72,10 @@ export const I18N = {
     'capture': 'Chụp',
     'retake': 'Chụp lại',
     'gallery': 'Thư viện',
+    'a2hs-title': 'Thêm vào Màn hình chính',
+    'a2hs-ios': 'Nhấn nút chia sẻ, rồi chọn "Thêm vào Màn hình chính"',
+    'a2hs-android': 'Cài ứng dụng để có trải nghiệm tốt nhất',
+    'a2hs-install': 'Cài đặt',
   },
 };
 
@@ -78,6 +86,7 @@ const txtIds = [
   'photo-mode', 'photo-desc', 'live-mode', 'live-desc', 'settings', 'instrument',
   'ambient', 'scale', 'pentatonic', 'major', 'minor', 'scan-speed', 'slow', 'fast',
   'sensitivity', 'low', 'high', 'camera', 'front', 'back', 'language',
+  'a2hs-title', 'a2hs-install',
 ];
 
 export function t(key) {
