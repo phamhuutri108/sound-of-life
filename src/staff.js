@@ -54,7 +54,7 @@ export function calculateStaffPositions(canvasW, canvasH) {
 }
 
 export function drawStaffLines(sd) {
-  ctx.strokeStyle = 'rgba(255, 255, 255, 0.55)';
+  ctx.strokeStyle = 'rgba(185, 220, 165, 0.5)';
   ctx.lineWidth = 1.5;
   ctx.setLineDash([]);
   sd.positions.forEach(pos => {
@@ -67,14 +67,14 @@ export function drawStaffLines(sd) {
     if (pos.isLedger) {
       const cx  = sd.displayWidth / 2;
       const hw  = sd.spacing * 2;
-      ctx.strokeStyle = 'rgba(255,255,255,0.35)';
+      ctx.strokeStyle = 'rgba(185,220,165,0.3)';
       ctx.setLineDash([4, 3]);
       ctx.beginPath();
       ctx.moveTo(cx - hw, pos.y);
       ctx.lineTo(cx + hw, pos.y);
       ctx.stroke();
       ctx.setLineDash([]);
-      ctx.strokeStyle = 'rgba(255, 255, 255, 0.55)';
+      ctx.strokeStyle = 'rgba(185, 220, 165, 0.5)';
     }
   });
 }
@@ -83,7 +83,7 @@ export function drawTrebleClef(sd) {
   const clefX = sd.staffLeft - 4;
   const clefY = (sd.staffTop + sd.staffBottom) / 2;
   const clefSize = (sd.staffBottom - sd.staffTop) * 1.0;
-  ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+  ctx.fillStyle = 'rgba(185, 225, 160, 0.62)';
   ctx.font = `${clefSize}px serif`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
@@ -91,34 +91,34 @@ export function drawTrebleClef(sd) {
 }
 
 export function drawScanLine(scanX, sd) {
-  const g = ctx.createLinearGradient(scanX - 6, 0, scanX + 6, 0);
-  g.addColorStop(0,   'rgba(255,255,255,0)');
-  g.addColorStop(0.3, 'rgba(255,255,255,0.4)');
-  g.addColorStop(0.5, 'rgba(255,255,255,0.9)');
-  g.addColorStop(0.7, 'rgba(255,255,255,0.4)');
-  g.addColorStop(1,   'rgba(255,255,255,0)');
+  const g = ctx.createLinearGradient(scanX - 7, 0, scanX + 7, 0);
+  g.addColorStop(0,   'rgba(170,230,130,0)');
+  g.addColorStop(0.3, 'rgba(170,230,130,0.38)');
+  g.addColorStop(0.5, 'rgba(190,245,150,0.88)');
+  g.addColorStop(0.7, 'rgba(170,230,130,0.38)');
+  g.addColorStop(1,   'rgba(170,230,130,0)');
   ctx.fillStyle = g;
-  ctx.fillRect(scanX - 6, 0, 12, sd.displayHeight);
+  ctx.fillRect(scanX - 7, 0, 14, sd.displayHeight);
 }
 
 export function drawNoteIndicator(x, y, active, confidence = 1) {
   if (!active) {
-    ctx.fillStyle = 'rgba(255,255,255,0.12)';
+    ctx.fillStyle = 'rgba(185,220,165,0.14)';
     ctx.beginPath();
     ctx.arc(x, y, 3.5, 0, Math.PI * 2);
     ctx.fill();
     return;
   }
   const alpha = 0.5 + confidence * 0.5;
-  const glow = ctx.createRadialGradient(x, y, 0, x, y, 22);
-  glow.addColorStop(0,   `rgba(212,165,116,${alpha})`);
-  glow.addColorStop(0.5, `rgba(212,165,116,${alpha * 0.4})`);
-  glow.addColorStop(1,   'rgba(212,165,116,0)');
+  const glow = ctx.createRadialGradient(x, y, 0, x, y, 24);
+  glow.addColorStop(0,   `rgba(120,176,74,${alpha})`);
+  glow.addColorStop(0.5, `rgba(120,176,74,${alpha * 0.35})`);
+  glow.addColorStop(1,   'rgba(120,176,74,0)');
   ctx.fillStyle = glow;
   ctx.beginPath();
-  ctx.arc(x, y, 22, 0, Math.PI * 2);
+  ctx.arc(x, y, 24, 0, Math.PI * 2);
   ctx.fill();
-  ctx.fillStyle = `rgba(255,240,220,${alpha})`;
+  ctx.fillStyle = `rgba(210,248,185,${alpha})`;
   ctx.beginPath();
   ctx.ellipse(x, y, 8, 6, -0.3, 0, Math.PI * 2);
   ctx.fill();
@@ -127,7 +127,7 @@ export function drawNoteIndicator(x, y, active, confidence = 1) {
 export function drawGrid(sd) {
   const cols = 8;
   const rows = 12;
-  ctx.strokeStyle = 'rgba(255,255,255,0.25)';
+  ctx.strokeStyle = 'rgba(185,220,165,0.25)';
   ctx.lineWidth = 1;
   ctx.setLineDash([]);
   // horizontal lines

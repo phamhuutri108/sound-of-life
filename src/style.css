@@ -1,23 +1,34 @@
 /* ═══════════════════════════════════════
-   CSS VARIABLES
+   CSS VARIABLES  — Ghibli forest palette
 ═══════════════════════════════════════ */
 :root {
-  --bg-deep: #0a0a0f;
-  --bg-panel: rgba(15, 15, 25, 0.85);
-  --bg-panel-solid: #0f0f19;
-  --text-primary: #f0ede8;
-  --text-secondary: rgba(240, 237, 232, 0.6);
-  --text-muted: rgba(240, 237, 232, 0.35);
-  --accent-gold: #d4a574;
-  --accent-gold-bright: #e8c49a;
-  --accent-gold-dim: rgba(212, 165, 116, 0.3);
-  --border-subtle: rgba(255, 255, 255, 0.08);
-  --border-active: rgba(212, 165, 116, 0.4);
-  --staff-line: rgba(255, 255, 255, 0.55);
-  --scan-line: rgba(255, 255, 255, 0.9);
-  --note-glow: rgba(212, 165, 116, 0.8);
-  --note-active: rgba(255, 240, 220, 0.9);
-  --font-display: 'Montserrat', system-ui, sans-serif;
+  /* Backgrounds */
+  --bg-deep: #0a1208;
+  --bg-panel: rgba(10, 20, 8, 0.88);
+  --bg-panel-solid: #0c1709;
+
+  /* Text */
+  --text-primary: #f2ece0;
+  --text-secondary: rgba(242, 236, 224, 0.65);
+  --text-muted: rgba(242, 236, 224, 0.38);
+
+  /* Accent — Totoro leaf green */
+  --accent-gold: #78b04a;
+  --accent-gold-bright: #9fcf6f;
+  --accent-gold-dim: rgba(120, 176, 74, 0.25);
+
+  /* Borders */
+  --border-subtle: rgba(120, 176, 74, 0.12);
+  --border-active: rgba(120, 176, 74, 0.45);
+
+  /* Staff canvas */
+  --staff-line: rgba(185, 220, 165, 0.5);
+  --scan-line: rgba(170, 230, 140, 0.9);
+  --note-glow: rgba(120, 176, 74, 0.8);
+  --note-active: rgba(210, 248, 185, 0.92);
+
+  /* Fonts */
+  --font-display: 'Lora', Georgia, serif;
   --font-ui: 'Montserrat', system-ui, sans-serif;
 }
 
@@ -56,9 +67,45 @@ button, .toolbar-btn, .segment-btn, .top-btn {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  background: var(--bg-deep);
+  background:
+    radial-gradient(ellipse 60% 50% at 50% 60%, rgba(30, 60, 20, 0.7) 0%, transparent 70%),
+    radial-gradient(ellipse 40% 30% at 20% 80%, rgba(20, 50, 15, 0.5) 0%, transparent 60%),
+    var(--bg-deep);
   z-index: 100;
-  transition: opacity 0.6s ease;
+  transition: opacity 0.7s ease;
+  overflow: hidden;
+}
+
+/* Firefly dots */
+.splash::before, .splash::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.splash::before {
+  background-image:
+    radial-gradient(1.5px 1.5px at 15% 25%, rgba(170,230,120,0.55) 0%, transparent 100%),
+    radial-gradient(1px 1px at 80% 15%, rgba(170,230,120,0.4) 0%, transparent 100%),
+    radial-gradient(2px 2px at 55% 70%, rgba(170,230,120,0.45) 0%, transparent 100%),
+    radial-gradient(1px 1px at 30% 60%, rgba(170,230,120,0.35) 0%, transparent 100%),
+    radial-gradient(1.5px 1.5px at 70% 45%, rgba(170,230,120,0.5) 0%, transparent 100%),
+    radial-gradient(1px 1px at 90% 70%, rgba(170,230,120,0.3) 0%, transparent 100%),
+    radial-gradient(1px 1px at 10% 85%, rgba(170,230,120,0.4) 0%, transparent 100%);
+  animation: fireflyFloat 8s ease-in-out infinite alternate;
+}
+.splash::after {
+  background-image:
+    radial-gradient(1px 1px at 45% 20%, rgba(200,240,160,0.4) 0%, transparent 100%),
+    radial-gradient(1.5px 1.5px at 25% 45%, rgba(200,240,160,0.35) 0%, transparent 100%),
+    radial-gradient(1px 1px at 75% 80%, rgba(200,240,160,0.45) 0%, transparent 100%),
+    radial-gradient(2px 2px at 60% 35%, rgba(200,240,160,0.3) 0%, transparent 100%);
+  animation: fireflyFloat 11s ease-in-out infinite alternate-reverse;
+}
+
+@keyframes fireflyFloat {
+  0%   { opacity: 0.4; transform: translateY(0); }
+  100% { opacity: 1;   transform: translateY(-12px); }
 }
 
 .splash.hidden {
@@ -68,46 +115,56 @@ button, .toolbar-btn, .segment-btn, .top-btn {
 
 .splash-title {
   font-family: var(--font-display);
-  font-size: clamp(26px, 7vw, 44px);
-  font-weight: 300;
-  color: var(--accent-gold);
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
+  font-size: clamp(28px, 7vw, 46px);
+  font-weight: 400;           /* Lora regular — elegant serif */
+  font-style: italic;
+  color: var(--accent-gold-bright);
+  letter-spacing: 0.06em;
   text-align: center;
+  text-shadow: 0 0 40px rgba(120, 176, 74, 0.4);
   animation: fadeInUp 1.2s ease-out;
+  position: relative;
+  z-index: 1;
 }
 
 .splash-subtitle {
-  font-family: var(--font-display);
+  font-family: var(--font-ui);
   font-weight: 300;
-  font-size: clamp(12px, 3vw, 14px);
+  font-size: clamp(12px, 3vw, 13px);
   color: var(--text-muted);
-  margin-top: 14px;
+  margin-top: 16px;
   text-align: center;
-  padding: 0 24px;
-  letter-spacing: 0.06em;
+  padding: 0 32px;
+  letter-spacing: 0.04em;
   animation: fadeInUp 1.2s ease-out 0.3s both;
+  position: relative;
+  z-index: 1;
 }
 
 .splash-start-btn {
-  margin-top: 48px;
-  padding: 13px 44px;
+  margin-top: 52px;
+  padding: 14px 48px;
   border: 1px solid var(--accent-gold);
   border-radius: 100px;
   background: transparent;
   color: var(--accent-gold);
   font-family: var(--font-ui);
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 500;
-  letter-spacing: 0.22em;
+  letter-spacing: 0.25em;
   text-transform: uppercase;
   cursor: pointer;
-  transition: all 0.3s ease;
+  transition: all 0.35s ease;
   animation: fadeInUp 1.2s ease-out 0.6s both;
   min-height: 48px;
+  position: relative;
+  z-index: 1;
 }
 
-.splash-start-btn:hover { background: var(--accent-gold-dim); }
+.splash-start-btn:hover {
+  background: var(--accent-gold-dim);
+  box-shadow: 0 0 24px rgba(120, 176, 74, 0.25);
+}
 .splash-start-btn:active { background: var(--accent-gold); color: var(--bg-deep); }
 
 .splash-lang {
@@ -147,7 +204,9 @@ button, .toolbar-btn, .segment-btn, .top-btn {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  background: var(--bg-deep);
+  background:
+    radial-gradient(ellipse 70% 50% at 50% 70%, rgba(20, 50, 14, 0.6) 0%, transparent 70%),
+    var(--bg-deep);
   z-index: 90;
   gap: 16px;
   padding: 32px 24px;
@@ -158,12 +217,12 @@ button, .toolbar-btn, .segment-btn, .top-btn {
 
 .mode-select-title {
   font-family: var(--font-display);
-  font-size: 11px;
-  font-weight: 500;
+  font-size: 13px;
+  font-weight: 400;
+  font-style: italic;
   color: var(--text-muted);
   margin-bottom: 24px;
-  letter-spacing: 0.2em;
-  text-transform: uppercase;
+  letter-spacing: 0.08em;
 }
 
 .mode-cards-row {
@@ -353,9 +412,10 @@ button, .toolbar-btn, .segment-btn, .top-btn {
   padding: 12px 16px;
   padding-bottom: max(12px, env(safe-area-inset-bottom));
   background: var(--bg-panel);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
   border-top: 1px solid var(--border-subtle);
+  border-radius: 20px 20px 0 0;
   z-index: 50;
 }
 
@@ -650,18 +710,24 @@ button, .toolbar-btn, .segment-btn, .top-btn {
    ANIMATIONS
 ═══════════════════════════════════════ */
 @keyframes fadeInUp {
-  from { opacity: 0; transform: translateY(20px); }
-  to { opacity: 1; transform: translateY(0); }
+  from { opacity: 0; transform: translateY(24px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
 
 @keyframes cardEnter {
-  from { opacity: 0; transform: translateY(24px); }
-  to { opacity: 1; transform: translateY(0); }
+  from { opacity: 0; transform: translateY(20px) scale(0.97); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
 }
 
 @keyframes pulse {
-  0% { transform: scale(1); opacity: 1; }
+  0%   { transform: scale(1); opacity: 1; }
   100% { transform: scale(2.5); opacity: 0; }
+}
+
+/* Gentle leaf sway for active elements */
+@keyframes leafSway {
+  0%, 100% { transform: rotate(-1.5deg); }
+  50%       { transform: rotate(1.5deg); }
 }
 
 /* ═══════════════════════════════════════
