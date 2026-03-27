@@ -840,6 +840,11 @@ function wireUI() {
   document.getElementById('btn-inst-marimba').addEventListener('click', () => setInstrument('marimba'));
   document.getElementById('btn-inst-kalimba').addEventListener('click', () => setInstrument('kalimba'));
   document.getElementById('btn-inst-flute').addEventListener('click', () => setInstrument('flute'));
+  document.getElementById('btn-inst-pluck').addEventListener('click', () => setInstrument('pluck'));
+  document.getElementById('btn-inst-harpsichord').addEventListener('click', () => setInstrument('harpsichord'));
+  document.getElementById('btn-inst-vibraphone').addEventListener('click', () => setInstrument('vibraphone'));
+  document.getElementById('btn-inst-theremin').addEventListener('click', () => setInstrument('theremin'));
+  document.getElementById('btn-inst-pad').addEventListener('click', () => setInstrument('pad'));
 
   // Scale buttons
   document.getElementById('btn-scale-pentatonic').addEventListener('click', () => setScale('pentatonic'));

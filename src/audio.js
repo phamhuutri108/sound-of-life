@@ -1,7 +1,13 @@
 import * as Tone from 'tone';
 
 export let audioReady = false;
-export const instruments = { ambient: null, piano: null, marimba: null, kalimba: null, flute: null };
+export const instruments = { ambient: null, piano: null, marimba: null, kalimba: null, flute: null, pluck: null, harpsichord: null, vibraphone: null, theremin: null, pad: null };
+
+// How long each note gate stays open — affects sustained instruments most
+const INSTRUMENT_NOTE_DURATIONS = {
+  theremin: '4n',  // long sustain notes slide into each other
+  pad:      '2n',  // needs time for attack (0.4 s) to bloom
+};
 export let currentInstrument = 'ambient';
 export let currentScale = 'pentatonic';
 
@@ -92,13 +98,95 @@ function createFluteSynth() {
   return synth;
 }
 
+function createPluckSynth() {
+  // Synth pluck: electric-piano/bell-like, snappy and staccato
+  const synth = new Tone.PolySynth(Tone.Synth, {
+    oscillator: { type: 'square4' },
+    envelope: { attack: 0.001, decay: 0.18, sustain: 0.0, release: 0.2 },
+    volume: -8,
+  });
+  synth.maxPolyphony = 4;
+  const reverb = new Tone.Freeverb({ roomSize: 0.15, dampening: 8000 });
+  reverb.wet.value = 0.08;
+  synth.chain(reverb, masterBus);
+  return synth;
+}
+
+function createHarpsichordSynth() {
+  // Harpsichord / pizzicato: bright sawtooth pluck, crisp and classical
+  const synth = new Tone.PolySynth(Tone.Synth, {
+    oscillator: { type: 'sawtooth' },
+    envelope: { attack: 0.005, decay: 0.45, sustain: 0.0, release: 0.15 },
+    volume: -10,
+  });
+  synth.maxPolyphony = 4;
+  const reverb = new Tone.Freeverb({ roomSize: 0.2, dampening: 7000 });
+  reverb.wet.value = 0.1;
+  synth.chain(reverb, masterBus);
+  return synth;
+}
+
+function createVibraphoneSynth() {
+  // Vibraphone: FM synthesis for metallic bell resonance
+  const synth = new Tone.PolySynth(Tone.FMSynth, {
+    harmonicity: 5,
+    modulationIndex: 1.5,
+    oscillator: { type: 'sine' },
+    modulation: { type: 'sine' },
+    envelope: { attack: 0.001, decay: 0.9, sustain: 0.08, release: 1.8 },
+    modulationEnvelope: { attack: 0.002, decay: 0.25, sustain: 0.0, release: 0.25 },
+    volume: -8,
+  });
+  synth.maxPolyphony = 4;
+  const reverb = new Tone.Freeverb({ roomSize: 0.65, dampening: 2000 });
+  reverb.wet.value = 0.4;
+  synth.chain(reverb, masterBus);
+  return synth;
+}
+
+function createThereminSynth() {
+  // Theremin: pure sine with vibrato + portamento for sliding feel
+  const synth = new Tone.PolySynth(Tone.Synth, {
+    portamento: 0.12,
+    oscillator: { type: 'sine' },
+    envelope: { attack: 0.15, decay: 0.05, sustain: 0.9, release: 0.8 },
+    volume: -9,
+  });
+  synth.maxPolyphony = 2;
+  const vibrato = new Tone.Vibrato({ frequency: 5.5, depth: 0.08, type: 'sine' });
+  const reverb = new Tone.Freeverb({ roomSize: 0.5, dampening: 2200 });
+  reverb.wet.value = 0.3;
+  synth.chain(vibrato, reverb, masterBus);
+  return synth;
+}
+
+function createPadSynth() {
+  // Synth Pad: lush sawtooth + chorus + heavy reverb, spacious ambient
+  const synth = new Tone.PolySynth(Tone.Synth, {
+    oscillator: { type: 'sawtooth4' },
+    envelope: { attack: 0.4, decay: 0.6, sustain: 0.7, release: 3.5 },
+    volume: -14,
+  });
+  synth.maxPolyphony = 3;
+  const chorus = new Tone.Chorus({ frequency: 2.5, delayTime: 3.5, depth: 0.7, wet: 0.5 });
+  const reverb = new Tone.Freeverb({ roomSize: 0.9, dampening: 1500 });
+  reverb.wet.value = 0.65;
+  synth.chain(chorus, reverb, masterBus);
+  return synth;
+}
+
 export function setupInstruments() {
   masterBus = createMasterBus();
-  instruments.ambient  = createAmbientSynth();
-  instruments.piano    = createPianoSynth();
-  instruments.marimba  = createMarimbaSynth();
-  instruments.kalimba  = createKalimbaSynth();
-  instruments.flute    = createFluteSynth();
+  instruments.ambient     = createAmbientSynth();
+  instruments.piano       = createPianoSynth();
+  instruments.marimba     = createMarimbaSynth();
+  instruments.kalimba     = createKalimbaSynth();
+  instruments.flute       = createFluteSynth();
+  instruments.pluck       = createPluckSynth();
+  instruments.harpsichord = createHarpsichordSynth();
+  instruments.vibraphone  = createVibraphoneSynth();
+  instruments.theremin    = createThereminSynth();
+  instruments.pad         = createPadSynth();
 }
 
 export function initAudio() {
@@ -138,7 +226,8 @@ export function setScale(name) {
 export function playNote(note, velocity = 0.7) {
   const synth = instruments[currentInstrument];
   if (synth && audioReady) {
-    synth.triggerAttackRelease(note, '8n', Tone.now(), Math.min(1.0, velocity));
+    const dur = INSTRUMENT_NOTE_DURATIONS[currentInstrument] || '8n';
+    synth.triggerAttackRelease(note, dur, Tone.now(), Math.min(1.0, velocity));
   }
 }
 
