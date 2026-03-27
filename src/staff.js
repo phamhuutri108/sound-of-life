@@ -127,8 +127,8 @@ export function drawNoteIndicator(x, y, active, confidence = 1) {
 export function drawGrid(sd) {
   const cols = 8;
   const rows = 12;
-  ctx.strokeStyle = 'rgba(255,255,255,0.1)';
-  ctx.lineWidth = 0.8;
+  ctx.strokeStyle = 'rgba(255,255,255,0.25)';
+  ctx.lineWidth = 1;
   ctx.setLineDash([]);
   // horizontal lines
   for (let r = 0; r <= rows; r++) {

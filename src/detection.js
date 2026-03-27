@@ -1,4 +1,6 @@
-// Detection: brightness + OpenCV Canny edge detection
+// Detection: COCO-SSD (smart) with brightness+Canny fallback
+
+import { isSmartReady, runInference, getSmartResults } from './smartDetection.js';
 
 export let cvReady = false;
 
@@ -21,22 +23,8 @@ export function shouldTriggerNote(noteId, now, cooldownMs = 180) {
   return true;
 }
 
-function computeAdaptiveThreshold(imageData) {
-  const px = imageData.data;
-  let mn = 255, mx = 0;
-  for (let i = 0; i < px.length; i += 16) {
-    const g = 0.299 * px[i] + 0.587 * px[i + 1] + 0.114 * px[i + 2];
-    if (g < mn) mn = g;
-    if (g > mx) mx = g;
-  }
-  return Math.max(20, Math.min(80, (mx - mn) * 0.3));
-}
+/* ── Offscreen canvas for fallback detection ── */
 
-function getAdjustedThreshold(base, sens) {
-  return base * (1.5 - sens / 100);
-}
-
-// Offscreen canvas for detection
 const detectionCanvas = document.createElement('canvas');
 const detectionCtx = detectionCanvas.getContext('2d', { willReadFrequently: true });
 
@@ -60,13 +48,25 @@ function captureToDetectionCanvas({ appMode, photoImgEl, staffData }) {
   };
 }
 
+/* ── Fallback: brightness contrast ── */
+
+function computeAdaptiveThreshold(imageData) {
+  const px = imageData.data;
+  let mn = 255, mx = 0;
+  for (let i = 0; i < px.length; i += 16) {
+    const g = 0.299 * px[i] + 0.587 * px[i + 1] + 0.114 * px[i + 2];
+    if (g < mn) mn = g;
+    if (g > mx) mx = g;
+  }
+  return Math.max(20, Math.min(80, (mx - mn) * 0.3));
+}
+
 function detectBrightnessAtPositions(frameData, notePositions, scanXScaled, sensitivity) {
   const { imageData, width, height } = frameData;
   const px = imageData.data;
   const base = computeAdaptiveThreshold(imageData);
-  const threshold = getAdjustedThreshold(base, sensitivity);
+  const threshold = base * (1.5 - sensitivity / 100);
 
-  // Global average
   let globalSum = 0, globalCount = 0;
   for (let i = 0; i < px.length; i += 16) {
     globalSum += 0.299 * px[i] + 0.587 * px[i + 1] + 0.114 * px[i + 2];
@@ -90,10 +90,11 @@ function detectBrightnessAtPositions(frameData, notePositions, scanXScaled, sens
       }
     }
     const localAvg = localCount > 0 ? localSum / localCount : globalAvg;
-    const diff = Math.abs(localAvg - globalAvg);
-    return diff > threshold;
+    return Math.abs(localAvg - globalAvg) > threshold;
   });
 }
+
+/* ── Fallback: OpenCV Canny edges ── */
 
 function detectEdgesAtPositions(detCanvas, notePositions, scanXScaled) {
   if (!cvReady) return null;
@@ -126,8 +127,24 @@ function detectEdgesAtPositions(detCanvas, notePositions, scanXScaled) {
   }
 }
 
+/* ── Main export ── */
+
 export function detectObjects({ appMode, photoDataURL, photoImgEl, staffData, scanX, sensitivity }) {
   if (!staffData) return null;
+
+  // ── Smart path: COCO-SSD ready ──────────────────────────
+  if (isSmartReady()) {
+    // Kick off async inference (throttled internally); result cached
+    const video = document.getElementById('cameraVideo');
+    const source = (appMode === 'photo' && photoImgEl) ? photoImgEl : video;
+    runInference(source); // fire-and-forget
+
+    const smart = getSmartResults(staffData, scanX);
+    if (smart) return smart;
+    // smart returns null when no boxes cached yet → fall through
+  }
+
+  // ── Fallback: brightness + Canny ────────────────────────
   const cap = captureToDetectionCanvas({ appMode, photoImgEl, staffData });
   if (!cap) return null;
 

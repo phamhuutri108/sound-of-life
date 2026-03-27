@@ -14,6 +14,7 @@ import {
   cameraFacing as _cameraFacing,
 } from './camera.js';
 import {
+  ctx,
   resizeCanvas,
   renderStaff,
   setShowClef, setShowGrid,
@@ -23,6 +24,7 @@ import {
   noteCooldowns, shouldTriggerNote,
   detectObjects as _detectObjects,
 } from './detection.js';
+import { loadSmartModel, isSmartReady, drawDetections } from './smartDetection.js';
 
 /* ═══════════════════════════════════════════════════════════════
    APP STATE
@@ -232,6 +234,10 @@ function animationLoop(now) {
   }
 
   renderStaff(curScanX, lastDetectionResults, staffData, isPlaying);
+  if (isSmartReady()) {
+    drawDetections(ctx, staffData);
+    updateAIBadge();
+  }
 }
 
 let loopStarted = false;
@@ -246,10 +252,20 @@ function startAnimationLoop() {
 ═══════════════════════════════════════════════════════════════ */
 function onStart() {
   initAudio(); // sync within gesture — do NOT await
+  loadSmartModel(); // fire-and-forget; detection falls back until ready
   document.getElementById('splash').classList.add('hidden');
   setTimeout(() => {
     document.getElementById('modeSelect').classList.remove('hidden');
   }, 350);
+}
+
+function updateAIBadge() {
+  const badge = document.getElementById('aiBadge');
+  if (!badge) return;
+  if (isSmartReady()) {
+    badge.textContent = '✦ AI';
+    badge.classList.add('ready');
+  }
 }
 
 /* ═══════════════════════════════════════════════════════════════

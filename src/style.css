@@ -302,6 +302,13 @@ button, .toolbar-btn, .segment-btn, .top-btn {
 
 .top-btn:active { background: rgba(212, 165, 116, 0.3); }
 
+.top-bar-center {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
 .mode-badge {
   padding: 6px 14px;
   border-radius: 100px;
@@ -313,6 +320,25 @@ button, .toolbar-btn, .segment-btn, .top-btn {
   color: var(--accent-gold);
   letter-spacing: 0.1em;
   text-transform: uppercase;
+}
+
+.ai-badge {
+  padding: 3px 10px;
+  border-radius: 100px;
+  background: rgba(0, 0, 0, 0.35);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--text-muted);
+  letter-spacing: 0.08em;
+  transition: color 0.4s, border-color 0.4s;
+  border: 1px solid transparent;
+}
+
+.ai-badge.ready {
+  color: var(--accent-gold);
+  border-color: var(--accent-gold-dim);
 }
 
 /* ═══════════════════════════════════════
