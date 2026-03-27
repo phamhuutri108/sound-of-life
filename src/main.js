@@ -137,11 +137,12 @@ async function selectMode(mode) {
   if (staffData) scanX = staffData.staffLeft;
   startAnimationLoop();
 
-  // Show opencv status if not ready
+  // Show opencv status briefly if not ready yet; auto-hide after 4s
   if (!cvReady) {
     const el = document.getElementById('opencvStatus');
     el.style.display = '';
     el.classList.remove('loaded');
+    setTimeout(() => el.classList.add('loaded'), 4000);
   }
 }
 
