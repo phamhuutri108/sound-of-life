@@ -14,7 +14,7 @@ import {
   cameraFacing as _cameraFacing,
 } from './camera.js';
 import {
-  canvas, ctx,
+  ctx,
   resizeCanvas,
   drawStaffLines, drawTrebleClef, drawNoteIndicator,
   renderStaff,
@@ -185,7 +185,8 @@ function setCameraFacing(facing) {
 ═══════════════════════════════════════════════════════════════ */
 let lastDetectionTime = 0;
 let lastDetectionResults = null;
-const DETECTION_INTERVAL = 66; // ~15fps for detection
+const DETECTION_INTERVAL = 200; // ~5fps — lighter on mobile
+const MAX_NOTES_PER_PASS = 2;   // prevent audio overload
 
 function animationLoop(now) {
   requestAnimationFrame(animationLoop);
@@ -222,18 +223,16 @@ function animationLoop(now) {
         sensitivity,
       });
 
-      // Trigger notes
+      // Trigger notes — cap at MAX_NOTES_PER_PASS to prevent audio overload
       if (lastDetectionResults && isAudioReady()) {
-        lastDetectionResults.forEach((result, i) => {
-          if (result.detected) {
-            const noteId = `note_${i}`;
-            if (shouldTriggerNote(noteId, now)) {
-              const note = getNoteForPosition(i);
-              const vel = confidenceToVelocity(result.confidence);
-              playNote(note, vel);
-            }
+        let fired = 0;
+        for (let i = 0; i < lastDetectionResults.length && fired < MAX_NOTES_PER_PASS; i++) {
+          const result = lastDetectionResults[i];
+          if (result.detected && shouldTriggerNote(`note_${i}`, now)) {
+            playNote(getNoteForPosition(i), confidenceToVelocity(result.confidence));
+            fired++;
           }
-        });
+        }
       }
     }
   }
@@ -262,23 +261,22 @@ function onStart() {
 /* ═══════════════════════════════════════════════════════════════
    ZOOM
 ═══════════════════════════════════════════════════════════════ */
-const ZOOM_MIN = 0.5;
+const ZOOM_MIN = 1;
 const ZOOM_MAX = 5;
-const ZOOM_PRESETS = [0.5, 1, 2];
+const ZOOM_PRESETS = [1, 2, 3];
 let currentZoom = 1;
 
 function applyZoom(z) {
   currentZoom = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, z));
-  const video = document.getElementById('cameraVideo');
-  video.style.transform = `scale(${currentZoom})`;
-  document.getElementById('photoPreview').style.transform = `scale(${currentZoom})`;
-  canvas.style.transform = `scale(${currentZoom})`;
+  // Scale the zoom container — overflow is clipped by parent .camera-view
+  document.getElementById('zoomContainer').style.transform =
+    currentZoom === 1 ? '' : `scale(${currentZoom})`;
   updateZoomButtons();
 }
 
 function updateZoomButtons() {
   document.querySelectorAll('.zoom-btn').forEach(btn => btn.classList.remove('active'));
-  const presetIds = ['zoomBtn05', 'zoomBtn1', 'zoomBtn2'];
+  const presetIds = ['zoomBtn1', 'zoomBtn2', 'zoomBtn3'];
   ZOOM_PRESETS.forEach((z, i) => {
     if (Math.abs(currentZoom - z) < 0.05) {
       document.getElementById(presetIds[i]).classList.add('active');
@@ -321,9 +319,9 @@ function updateWheelKnob() {
 
 function wireZoomWheel() {
   const presetDefs = [
-    { id: 'zoomBtn05', z: 0.5 },
-    { id: 'zoomBtn1',  z: 1   },
-    { id: 'zoomBtn2',  z: 2   },
+    { id: 'zoomBtn1', z: 1 },
+    { id: 'zoomBtn2', z: 2 },
+    { id: 'zoomBtn3', z: 3 },
   ];
 
   presetDefs.forEach(({ id, z }) => {
@@ -411,6 +409,7 @@ function wireUI() {
   document.getElementById('btn-inst-piano').addEventListener('click', () => setInstrument('piano'));
   document.getElementById('btn-inst-marimba').addEventListener('click', () => setInstrument('marimba'));
   document.getElementById('btn-inst-kalimba').addEventListener('click', () => setInstrument('kalimba'));
+  document.getElementById('btn-inst-flute').addEventListener('click', () => setInstrument('flute'));
 
   // Scale buttons
   document.getElementById('btn-scale-pentatonic').addEventListener('click', () => setScale('pentatonic'));

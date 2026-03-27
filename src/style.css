@@ -221,6 +221,14 @@ button, .toolbar-btn, .segment-btn, .top-btn {
 
 .camera-view.active { display: block; }
 
+/* Zoom container — scale this element; overflow is clipped by camera-view */
+#zoomContainer {
+  position: absolute;
+  inset: 0;
+  transform-origin: center center;
+  will-change: transform;
+}
+
 .camera-video {
   width: 100%;
   height: 100%;

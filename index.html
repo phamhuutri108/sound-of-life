@@ -66,11 +66,14 @@
        CAMERA VIEW
   ═══════════════════════════════════════ -->
   <div class="camera-view" id="cameraView">
-    <video id="cameraVideo" class="camera-video" playsinline autoplay muted></video>
-    <div class="photo-preview" id="photoPreview"></div>
-    <canvas id="staffCanvas" class="staff-canvas"></canvas>
+    <!-- Zoom container: scale this to zoom in, overflow clipped -->
+    <div id="zoomContainer">
+      <video id="cameraVideo" class="camera-video" playsinline autoplay muted></video>
+      <div class="photo-preview" id="photoPreview"></div>
+      <canvas id="staffCanvas" class="staff-canvas"></canvas>
+    </div>
 
-    <!-- Camera error -->
+    <!-- Camera error (outside zoom container so always visible) -->
     <div class="camera-error" id="cameraError">
       <svg width="40" height="40" viewBox="0 0 40 40" fill="none" stroke="rgba(240,237,232,0.4)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
         <rect x="3" y="10" width="34" height="24" rx="4"/>
@@ -122,9 +125,9 @@
     </div>
     <!-- Preset buttons -->
     <div class="zoom-presets">
-      <button class="zoom-btn" id="zoomBtn05">0.5<span class="zoom-x">×</span></button>
       <button class="zoom-btn active" id="zoomBtn1">1<span class="zoom-x">×</span></button>
       <button class="zoom-btn" id="zoomBtn2">2<span class="zoom-x">×</span></button>
+      <button class="zoom-btn" id="zoomBtn3">3<span class="zoom-x">×</span></button>
     </div>
   </div>
 
@@ -186,6 +189,7 @@
         <button class="segment-btn" id="btn-inst-piano">Piano</button>
         <button class="segment-btn" id="btn-inst-marimba">Marimba</button>
         <button class="segment-btn" id="btn-inst-kalimba">Kalimba</button>
+        <button class="segment-btn" id="btn-inst-flute" style="grid-column:1/-1">🪈 Flute</button>
       </div>
     </div>
 
