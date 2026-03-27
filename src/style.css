@@ -935,7 +935,7 @@ button, .toolbar-btn, .segment-btn, .top-btn {
 .zoom-dial-overlay {
   position: fixed;
   bottom: 0; left: 0; right: 0;
-  height: 360px;
+  height: 400px;
   z-index: 61;
   pointer-events: auto;
   transition: opacity 0.28s ease;

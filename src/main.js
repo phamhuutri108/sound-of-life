@@ -373,8 +373,11 @@ function showZoomDial(startX) {
   dialActive    = true;
   const el = document.getElementById('zoomDialOverlay');
   el.style.display = '';
-  requestAnimationFrame(() => { el.style.opacity = '1'; });
-  renderZoomDial();
+  // Wait one frame for layout so canvas.offsetWidth is correct
+  requestAnimationFrame(() => {
+    el.style.opacity = '1';
+    renderZoomDial();
+  });
   if (navigator.vibrate) navigator.vibrate(10);
 }
 
@@ -506,14 +509,7 @@ function renderZoomDial() {
 function wireZoomDial() {
   const overlay = document.getElementById('zoomDialOverlay');
 
-  // Touch on dial → drag to zoom
-  overlay.addEventListener('touchstart', e => {
-    if (e.touches.length === 1) {
-      dialTouchX    = e.touches[0].clientX;
-      dialTouchZoom = currentZoom;
-    }
-  }, { passive: true });
-
+  // Drag directly on the dial overlay (finger already on it after long-press)
   overlay.addEventListener('touchmove', e => {
     if (!dialActive || e.touches.length !== 1) return;
     const dx = e.touches[0].clientX - dialTouchX;
@@ -527,15 +523,51 @@ function wireZoomDial() {
     dialHideTimer = setTimeout(hideZoomDial, 1800);
   }, { passive: true });
 
-  // Long press on any zoom-btn → show dial
+  // iPhone-style: press-hold on zoom button, then drag without lifting
   document.querySelectorAll('.zoom-btn').forEach(btn => {
-    let lpTimer = null;
+    let lpTimer  = null;
+    let pressX   = 0;
+    let pressY   = 0;
+    let dragging = false;
+
     btn.addEventListener('touchstart', e => {
-      const startX = e.touches[0].clientX;
-      lpTimer = setTimeout(() => { showZoomDial(startX); }, 320);
+      pressX   = e.touches[0].clientX;
+      pressY   = e.touches[0].clientY;
+      dragging = false;
+      dialTouchX    = pressX;
+      dialTouchZoom = currentZoom;
+
+      lpTimer = setTimeout(() => {
+        showZoomDial(pressX);
+        dragging = true;
+      }, 350);
     }, { passive: true });
-    btn.addEventListener('touchend',  () => clearTimeout(lpTimer), { passive: true });
-    btn.addEventListener('touchmove', () => clearTimeout(lpTimer), { passive: true });
+
+    btn.addEventListener('touchmove', e => {
+      const dx = e.touches[0].clientX - pressX;
+      const dy = e.touches[0].clientY - pressY;
+
+      // Cancel long-press only if moved more than 12px (finger jitter tolerance)
+      if (!dragging && Math.hypot(dx, dy) > 12) {
+        clearTimeout(lpTimer);
+      }
+
+      // If dial is showing, continue drag from this same touch
+      if (dialActive) {
+        const totalDx = e.touches[0].clientX - dialTouchX;
+        const newLogZ = Math.log(Math.max(ZOOM_MIN, dialTouchZoom)) + totalDx / DIAL_PX_PER_LOG;
+        applyZoom(Math.exp(newLogZ));
+        renderZoomDial();
+      }
+    }, { passive: true });
+
+    btn.addEventListener('touchend', () => {
+      clearTimeout(lpTimer);
+      if (dialActive) {
+        clearTimeout(dialHideTimer);
+        dialHideTimer = setTimeout(hideZoomDial, 1800);
+      }
+    }, { passive: true });
   });
 }
 
