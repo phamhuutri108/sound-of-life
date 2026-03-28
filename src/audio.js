@@ -24,7 +24,7 @@ const INSTRUMENT_NOTE_DURATIONS = {
   theremin: '4n',  // long sustain notes slide into each other
   pad:      '2n',  // needs time for attack (0.4 s) to bloom
 };
-export let currentInstrument = 'flute';
+export let currentInstrument = 'wanderer';
 export let currentScale = 'major';
 
 export const SCALES = {
@@ -214,6 +214,7 @@ function createPadSynth() {
 }
 
 const _instrumentFactories = {
+  wanderer:    createWandererSynth,
   ambient:     createAmbientSynth,
   piano:       createPianoSynth,
   marimba:     createMarimbaSynth,
@@ -223,7 +224,6 @@ const _instrumentFactories = {
   harpsichord: createHarpsichordSynth,
   vibraphone:  createVibraphoneSynth,
   pad:         createPadSynth,
-  wanderer:    createWandererSynth,
 };
 
 // Ensure the instrument for `name` exists; create it lazily if not.
