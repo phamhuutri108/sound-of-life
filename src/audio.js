@@ -246,7 +246,7 @@ export function initAudio() {
   Tone.start().then(() => {
     // Reduce scheduling look-ahead on mobile: default 0.1 s adds 100 ms of extra latency.
     // 0.05 s is still safe (2–3 audio buffer lengths) and halves perceived delay.
-    if (isMobile) Tone.getContext().lookAhead = 0.05;
+    if (isMobile) Tone.getContext().lookAhead = 0.02;
     audioReady = true;
     setupInstruments();
   }).catch(err => console.warn('Audio init error:', err));
@@ -255,7 +255,7 @@ export function initAudio() {
 export function tryUnlockAudio() {
   if (!audioReady) {
     Tone.start().then(() => {
-      if (isMobile) Tone.getContext().lookAhead = 0.05;
+      if (isMobile) Tone.getContext().lookAhead = 0.02;
       audioReady = true;
       if (!masterBus) setupInstruments();
     }).catch(() => {});

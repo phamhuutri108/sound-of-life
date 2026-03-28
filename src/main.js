@@ -80,10 +80,12 @@ function applyPhotoBounds() {
    SCAN LINE STATE
 ═══════════════════════════════════════════════════════════════ */
 let scanX = 0;
-let scanSpeed = 0.8; // px/frame at 60fps
+// Speed formula: (val * 0.8 + 0.5) * 0.7 — 30% slower than original across all levels
+// val=1 (default/slowest) → 0.91 px/frame; val=5 (fastest) → 3.15 px/frame
+let scanSpeed = 0.91; // matches slider default value=1
 
 function setScanSpeed(val) {
-  scanSpeed = parseFloat(val) * 0.8 + 0.5;
+  scanSpeed = (parseFloat(val) * 0.8 + 0.5) * 0.7;
 }
 
 function advanceScanLine() {
@@ -333,7 +335,7 @@ let activePerfProfile = 'balanced';
 const isHighEndIPhone = /iPhone/i.test(navigator.userAgent || '')
   && (navigator.hardwareConcurrency || 4) >= 6
   && (window.devicePixelRatio || 1) >= 3;
-const BASE_DETECTION_INTERVAL = isHighEndIPhone ? 180 : 260;
+const BASE_DETECTION_INTERVAL = isHighEndIPhone ? 120 : 180;
 const MAX_NOTES_PER_PASS = 2;
 const GLOBAL_NOTE_GAP_MS = 65;
 const NOTE_COOLDOWN_MS = 210;
@@ -913,7 +915,8 @@ function wireUI() {
   document.getElementById('btn-scale-major').addEventListener('click', () => setScale('major'));
   document.getElementById('btn-scale-minor').addEventListener('click', () => setScale('minor'));
 
-  // Scan speed slider
+  // Scan speed slider — init from default value so code always matches the UI
+  setScanSpeed(document.getElementById('speedSlider').value);
   document.getElementById('speedSlider').addEventListener('input', e => setScanSpeed(e.target.value));
 
   // Sensitivity slider
