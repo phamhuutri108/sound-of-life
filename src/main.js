@@ -501,9 +501,9 @@ function animationLoop(now) {
         _photoMelodyIdx++;
       }
       const entry = melody[_photoMelodyIdx];
-      // Always sync visual to the current melody position — dots reflect exactly
-      // what is detected at the nearest past column, not stale results.
-      lastDetectionResults = entry.results;
+      // Visual: only show dots for note-start positions (count matches notes played).
+      // Audio logic below uses entry.results directly — this line is display-only.
+      lastDetectionResults = entry.results.filter(r => r.isNoteStart);
       // Fire notes only at the start of each detected run
       if (Math.abs(entry.x - curScanX) <= scanSpeed + 1 && isAudioReady()) {
         const strongestConf = {};
@@ -1004,8 +1004,8 @@ function wireUI() {
   document.getElementById('btn-inst-kalimba').addEventListener('click', () => setInstrument('kalimba'));
   document.getElementById('btn-inst-flute').addEventListener('click', () => setInstrument('flute'));
   document.getElementById('btn-inst-vibraphone').addEventListener('click', () => setInstrument('vibraphone'));
-  document.getElementById('btn-inst-theremin').addEventListener('click', () => setInstrument('theremin'));
   document.getElementById('btn-inst-pad').addEventListener('click', () => setInstrument('pad'));
+  document.getElementById('btn-inst-wanderer').addEventListener('click', () => setInstrument('wanderer'));
 
   // Scan speed slider — init from default value so code always matches the UI
   setScanSpeed(document.getElementById('speedSlider').value);

@@ -1,7 +1,7 @@
 import * as Tone from 'tone';
 
 export let audioReady = false;
-export const instruments = { ambient: null, piano: null, marimba: null, kalimba: null, flute: null, pluck: null, harpsichord: null, vibraphone: null, theremin: null, pad: null };
+export const instruments = { ambient: null, piano: null, marimba: null, kalimba: null, flute: null, pluck: null, harpsichord: null, vibraphone: null, pad: null, wanderer: null };
 
 // Mobile detection — used to reduce DSP load (reverb wet/roomSize) and lower lookAhead
 const isMobile = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent || '');
@@ -175,6 +175,25 @@ function createThereminSynth() {
   return synth;
 }
 
+function createWandererSynth() {
+  // Wind chime: FM synthesis with high harmonicity for bright metallic ring,
+  // very short attack + medium decay + zero sustain = each note strikes like a chime tube.
+  // Heavy spacious reverb lets the overtone tail drift and shimmer in the air.
+  const synth = new Tone.PolySynth(Tone.FMSynth, {
+    harmonicity: 5.1,
+    modulationIndex: 10,
+    oscillator: { type: 'sine' },
+    modulation: { type: 'sine' },
+    envelope: { attack: 0.001, decay: 0.5, sustain: 0.0, release: 1.8 },
+    modulationEnvelope: { attack: 0.001, decay: 0.12, sustain: 0.0, release: 0.12 },
+    volume: -6,
+  });
+  synth.maxPolyphony = _poly(3, 5);
+  const reverb = _rv(0.88, 0.62, 900);
+  synth.chain(reverb, masterBus);
+  return synth;
+}
+
 function createPadSynth() {
   // Synth Pad: lush sawtooth + chorus + heavy reverb, spacious ambient
   const synth = new Tone.PolySynth(Tone.Synth, {
@@ -203,8 +222,8 @@ const _instrumentFactories = {
   pluck:       createPluckSynth,
   harpsichord: createHarpsichordSynth,
   vibraphone:  createVibraphoneSynth,
-  theremin:    createThereminSynth,
   pad:         createPadSynth,
+  wanderer:    createWandererSynth,
 };
 
 // Ensure the instrument for `name` exists; create it lazily if not.
