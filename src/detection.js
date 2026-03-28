@@ -314,6 +314,51 @@ function _applyGhostNotes(melody, secPerStep) {
     }
   }
   realStarts.sort((a, b) => a.ci - b.ci || a.ni - b.ni);
+
+  // ── Pass 3: lead-in before first real note, tail-out after last real note ──
+  // Place 1–2 ghost notes just before the melody begins and just after it ends
+  // so the music "breathes in" before the first note and fades out naturally.
+  const _placeRaw = (ci, ni, dur) => {
+    if (ci < 0 || ci >= N || ni < 0 || ni >= M) return;
+    if (melody[ci].results[ni].detected) return;
+    melody[ci].results[ni].detected     = true;
+    melody[ci].results[ni].isNoteStart  = true;
+    melody[ci].results[ni].durationSecs = dur;
+    melody[ci].results[ni].confidence   = 0.0;
+    melody[ci].results[ni].isGhost      = true;
+  };
+
+  if (realStarts.length > 0) {
+    // Lead-in: 1–2 ghost notes before first real note
+    const first = realStarts[0];
+    if (first.ci >= 2) {
+      const seedL = first.ci * 31;
+      const offset1 = Math.max(1, Math.round(first.ci * 0.45));
+      const ni1 = Math.max(0, Math.min(M - 1, first.ni + (_r(seedL) > 0.5 ? 1 : -1)));
+      _placeRaw(first.ci - offset1, ni1, secPerStep * 2);
+      if (first.ci >= 4 && _r(seedL + 1) < 0.55) {
+        const offset2 = Math.max(1, Math.round(first.ci * 0.75));
+        const ni2 = Math.max(0, Math.min(M - 1, ni1 + (_r(seedL + 2) > 0.5 ? 1 : -1)));
+        _placeRaw(first.ci - offset2, ni2, secPerStep * 1.5);
+      }
+    }
+
+    // Tail-out: 1–2 ghost notes after last real note
+    const last = realStarts[realStarts.length - 1];
+    const tailRoom = N - 1 - last.ci;
+    if (tailRoom >= 2) {
+      const seedT = last.ci * 37;
+      const offset1 = Math.max(1, Math.round(tailRoom * 0.40));
+      const ni1 = Math.max(0, Math.min(M - 1, last.ni + (_r(seedT) > 0.5 ? 1 : -1)));
+      _placeRaw(last.ci + offset1, ni1, secPerStep * 2);
+      if (tailRoom >= 4 && _r(seedT + 1) < 0.55) {
+        const offset2 = Math.max(1, Math.round(tailRoom * 0.75));
+        const ni2 = Math.max(0, Math.min(M - 1, ni1 + (_r(seedT + 2) > 0.5 ? 1 : -1)));
+        _placeRaw(last.ci + offset2, ni2, secPerStep * 1.5);
+      }
+    }
+  }
+
   for (let k = 0; k < realStarts.length - 1; k++) {
     const a = realStarts[k], b = realStarts[k + 1];
     const pitchGap = Math.abs(a.ni - b.ni);
