@@ -1,11 +1,17 @@
-const CACHE_NAME = 'sound-of-life-v3';
+const CACHE_NAME = 'sound-of-life-v4';
 
 self.addEventListener('install', () => self.skipWaiting());
 self.addEventListener('activate', e => e.waitUntil(
   // Delete all old caches so stale JS/HTML never mixes with new HTML/JS
-  caches.keys().then(keys =>
-    Promise.all(keys.filter(k => k !== CACHE_NAME).map(k => caches.delete(k)))
-  ).then(() => clients.claim())
+  caches.keys()
+    .then(keys => Promise.all(keys.filter(k => k !== CACHE_NAME).map(k => caches.delete(k))))
+    .then(() => self.clients.claim())
+    .then(() => self.clients.matchAll({ type: 'window' }))
+    .then(tabs => {
+      // Tell every open tab to reload so they get fresh JS/HTML immediately.
+      // Without this, users need TWO manual reloads after a deployment.
+      tabs.forEach(tab => tab.postMessage({ type: 'SW_RELOAD' }));
+    })
 ));
 
 self.addEventListener('fetch', e => {
