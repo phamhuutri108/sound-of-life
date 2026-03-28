@@ -250,15 +250,13 @@ function capturePhoto() {
     photoDataURL = result.photoDataURL;
     photoImgEl = result.photoImgEl;
     document.getElementById('saveBtn').style.display = '';
-    // setTimeout gives browser 2-3 frames to actually paint the loading overlay
-    // before applyPhotoBounds blocks the main thread with heavy sync work.
     setTimeout(() => {
       if (photoImgEl.complete && photoImgEl.naturalWidth) {
         applyPhotoBounds();
       } else {
         photoImgEl.onload = applyPhotoBounds;
       }
-    }, 50);
+    }, 1500);
   } else {
     hidePhotoLoading();
   }
@@ -345,7 +343,7 @@ function onImportPhoto() {
         } else {
           photoImgEl.onload = applyPhotoBounds;
         }
-      }, 50);
+      }, 1500);
     },
   });
 }
