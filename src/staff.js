@@ -113,12 +113,12 @@ export function drawScanLine(scanX, sd) {
 function drawNoteIndicator(x, y, confidence = 1) {
   const alpha = 0.5 + confidence * 0.5;
   // Outer glow
-  ctx.fillStyle = `rgba(255,255,255,${(alpha * 0.22).toFixed(2)})`;
+  ctx.fillStyle = `rgba(80,220,120,${(alpha * 0.22).toFixed(2)})`;
   ctx.beginPath();
   ctx.arc(x, y, 22, 0, Math.PI * 2);
   ctx.fill();
   // Note head ellipse
-  ctx.fillStyle = `rgba(255,255,255,${alpha.toFixed(2)})`;
+  ctx.fillStyle = `rgba(80,220,120,${alpha.toFixed(2)})`;
   ctx.beginPath();
   ctx.ellipse(x, y, 8, 6, -0.3, 0, Math.PI * 2);
   ctx.fill();
