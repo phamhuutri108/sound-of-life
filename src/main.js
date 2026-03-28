@@ -542,40 +542,39 @@ function animationLoop(now) {
         _photoMelodyIdx++;
       }
       const entry = melody[_photoMelodyIdx];
-      // Visual: only show dots for note-start positions (count matches notes played).
-      // Audio logic below uses entry.results directly — this line is display-only.
-      // Visual: show only the top MAX_NOTES_PER_PASS notes (by confidence) so
-      // the display matches what actually plays — avoids visual chord-explosion.
+      // Visual: top MAX_NOTES_PER_PASS by confidence — matches what plays.
       const _ns = entry.results.filter(r => r.isNoteStart);
       _ns.sort((a, b) => (b.confidence ?? 0) - (a.confidence ?? 0));
       lastDetectionResults = _ns.slice(0, MAX_NOTES_PER_PASS);
-      // Fire notes only once per melody entry (guard against multi-frame re-fires on same position)
-      if (_photoMelodyIdx !== _lastFiredMelodyIdx && Math.abs(entry.x - curScanX) <= scanSpeed + 1 && isAudioReady()) {
-        _lastFiredMelodyIdx = _photoMelodyIdx;
-        const strongestConf = {};
-        const strongestDur  = {};
-        for (const result of entry.results) {
-          if (!result.detected || !result.isNoteStart) continue;
-          const noteIdx = result.noteIndex ?? 0;
-          if (strongestConf[noteIdx] === undefined || result.confidence > strongestConf[noteIdx]) {
-            strongestConf[noteIdx] = result.confidence;
-            strongestDur[noteIdx]  = result.durationSecs ?? null;
+
+      // Audio: fire every entry skipped since last frame.
+      // The old proximity check (Math.abs(entry.x - curScanX) <= scanSpeed+1) broke
+      // mobile because large dt (83 ms → 4.5 px/frame) always exceeded the window.
+      // Now we iterate every passed entry so no note is dropped regardless of frame rate.
+      if (isAudioReady() && _photoMelodyIdx !== _lastFiredMelodyIdx) {
+        const fireFrom = _lastFiredMelodyIdx + 1;
+        for (let fi = fireFrom; fi <= _photoMelodyIdx; fi++) {
+          if (now - lastAnyNoteTime < GLOBAL_NOTE_GAP_MS) break;
+          const fe = melody[fi];
+          const sc = {}, sd = {};
+          for (const r of fe.results) {
+            if (!r.detected || !r.isNoteStart) continue;
+            const ni = r.noteIndex ?? 0;
+            if (sc[ni] === undefined || r.confidence > sc[ni]) {
+              sc[ni] = r.confidence;
+              sd[ni] = r.durationSecs ?? null;
+            }
           }
-        }
-        const keys = Object.keys(strongestConf);
-        keys.sort((a, b) => strongestConf[b] - strongestConf[a]);
-        // GLOBAL_NOTE_GAP_MS gates between columns, not between notes in same column.
-        // Check once before the loop so all notes in this entry can play together.
-        if (now - lastAnyNoteTime >= GLOBAL_NOTE_GAP_MS) {
-          const limit = Math.min(keys.length, MAX_NOTES_PER_PASS);
-          for (let ki = 0; ki < limit; ki++) {
-            const noteIdx = +keys[ki];
-            const noteId = `edge_note_${noteIdx}`;
-            if (!shouldTriggerNote(noteId, now, NOTE_COOLDOWN_MS)) continue;
-            playNote(getNoteForPosition(noteIdx), confidenceToVelocity(strongestConf[noteIdx]), strongestDur[noteIdx]);
+          const ks = Object.keys(sc).sort((a, b) => sc[b] - sc[a]);
+          const lim = Math.min(ks.length, MAX_NOTES_PER_PASS);
+          for (let ki = 0; ki < lim; ki++) {
+            const ni = +ks[ki];
+            if (!shouldTriggerNote(`edge_note_${ni}`, now, NOTE_COOLDOWN_MS)) continue;
+            playNote(getNoteForPosition(ni), confidenceToVelocity(sc[ni]), sd[ni]);
           }
           lastAnyNoteTime = now;
         }
+        _lastFiredMelodyIdx = _photoMelodyIdx;
       }
     }
 
