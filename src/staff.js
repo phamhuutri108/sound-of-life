@@ -157,8 +157,9 @@ let _bgCanvas = null;
 let _bgKey = '';
 
 function _ensureBg(sd) {
-  const dpr = window.devicePixelRatio || 1;
-  const key = `${canvas.width}|${canvas.height}|${+showGrid}|${+showClef}|${sd.staffTop.toFixed(0)}|${sd.staffBottom.toFixed(0)}`;
+  // Must match the capped DPR used in resizeCanvas — do NOT use raw devicePixelRatio here
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const key = `${canvas.width}|${canvas.height}|${+showGrid}|${+showClef}|${sd.staffTop.toFixed(0)}|${sd.staffBottom.toFixed(0)}|${sd.staffLeft.toFixed(0)}`;
   if (_bgKey === key && _bgCanvas) return _bgCanvas;
   if (!_bgCanvas) _bgCanvas = document.createElement('canvas');
   _bgCanvas.width  = canvas.width;
@@ -186,8 +187,14 @@ export function renderStaff(scanX, detectionResults, staffData, isPlaying) {
   const sd = staffData;
   ctx.clearRect(0, 0, sd.displayWidth, sd.displayHeight);
 
-  // Blit cached static background (one GPU drawImage — essentially free)
-  ctx.drawImage(_ensureBg(sd), 0, 0);
+  // Blit cached static background at 1:1 physical pixels.
+  // The bg canvas is already at full physical resolution; bypass ctx's DPR
+  // transform so it isn't scaled again (which would overflow the canvas).
+  const bgCanvas = _ensureBg(sd);
+  ctx.save();
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.drawImage(bgCanvas, 0, 0);
+  ctx.restore();
 
   if (isPlaying && scanX >= sd.staffLeft && scanX <= sd.staffRight) {
     drawScanLine(scanX, sd);
