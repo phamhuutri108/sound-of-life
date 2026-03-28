@@ -193,10 +193,19 @@ async function selectMode(mode) {
   document.getElementById('zoomControls').style.display = '';
   document.getElementById('zoomControls').style.opacity = '1';
   applyMode(mode);
-  const cameraStarted = await startCamera(_cameraFacing);
 
-  // Prioritize camera readiness first — no more 3 s model load delay
+  try {
+    await startCamera(_cameraFacing);
+  } catch (e) {
+    // Camera failed (permission denied, in-app browser, etc.).
+    // Continue anyway — user can still import from gallery.
+    console.warn('Camera start failed:', e);
+  }
+
   initCameraZoom();
+  // Small yield so the browser has a chance to paint the cameraView at its
+  // final size before we measure it for the staff canvas dimensions.
+  await new Promise(r => setTimeout(r, 50));
   staffData = resizeCanvas();
   if (staffData) scanX = staffData.staffLeft;
   startAnimationLoop();
@@ -1127,6 +1136,14 @@ function wireUI() {
         staffData = resizeCanvas();
       }
     }, 200);
+  });
+}
+
+// When a new service worker activates it sends SW_RELOAD so stale JS/HTML
+// is never mixed with fresh HTML/JS — user gets new code on the same load.
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.addEventListener('message', e => {
+    if (e.data?.type === 'SW_RELOAD') window.location.reload();
   });
 }
 
