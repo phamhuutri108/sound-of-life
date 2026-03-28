@@ -122,6 +122,7 @@ function advanceScanLine(dt) {
   if (scanX > staffData.staffRight) {
     scanX = staffData.staffLeft;
     _photoMelodyIdx = 0;
+    lastDetectionResults = null; // clear stale dots on wrap
     Object.keys(noteCooldowns).forEach(k => delete noteCooldowns[k]);
   }
   return scanX;
@@ -296,6 +297,7 @@ function _revokeBlobPhoto() {
 }
 
 function doRetakePhoto() {
+  releaseAllInstruments(); // stop music immediately when exiting photo
   _revokeBlobPhoto();
   retakePhoto();
   photoDataURL = null;
@@ -499,10 +501,9 @@ function animationLoop(now) {
         _photoMelodyIdx++;
       }
       const entry = melody[_photoMelodyIdx];
-      // Keep visual in sync: update detected positions on the playhead
-      if (Math.abs(entry.x - curScanX) <= scanSpeed + 2) {
-        lastDetectionResults = entry.results;
-      }
+      // Always sync visual to the current melody position — dots reflect exactly
+      // what is detected at the nearest past column, not stale results.
+      lastDetectionResults = entry.results;
       // Fire notes only at the start of each detected run
       if (Math.abs(entry.x - curScanX) <= scanSpeed + 1 && isAudioReady()) {
         const strongestConf = {};
@@ -999,20 +1000,12 @@ function wireUI() {
 
   // Instrument buttons
   document.getElementById('btn-inst-ambient').addEventListener('click', () => setInstrument('ambient'));
-  document.getElementById('btn-inst-piano').addEventListener('click', () => setInstrument('piano'));
   document.getElementById('btn-inst-marimba').addEventListener('click', () => setInstrument('marimba'));
   document.getElementById('btn-inst-kalimba').addEventListener('click', () => setInstrument('kalimba'));
   document.getElementById('btn-inst-flute').addEventListener('click', () => setInstrument('flute'));
-  document.getElementById('btn-inst-pluck').addEventListener('click', () => setInstrument('pluck'));
-  document.getElementById('btn-inst-harpsichord').addEventListener('click', () => setInstrument('harpsichord'));
   document.getElementById('btn-inst-vibraphone').addEventListener('click', () => setInstrument('vibraphone'));
   document.getElementById('btn-inst-theremin').addEventListener('click', () => setInstrument('theremin'));
   document.getElementById('btn-inst-pad').addEventListener('click', () => setInstrument('pad'));
-
-  // Scale buttons
-  document.getElementById('btn-scale-pentatonic').addEventListener('click', () => setScale('pentatonic'));
-  document.getElementById('btn-scale-major').addEventListener('click', () => setScale('major'));
-  document.getElementById('btn-scale-minor').addEventListener('click', () => setScale('minor'));
 
   // Scan speed slider — init from default value so code always matches the UI
   setScanSpeed(document.getElementById('speedSlider').value);

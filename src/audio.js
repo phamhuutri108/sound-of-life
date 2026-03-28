@@ -24,13 +24,11 @@ const INSTRUMENT_NOTE_DURATIONS = {
   theremin: '4n',  // long sustain notes slide into each other
   pad:      '2n',  // needs time for attack (0.4 s) to bloom
 };
-export let currentInstrument = 'ambient';
-export let currentScale = 'pentatonic';
+export let currentInstrument = 'flute';
+export let currentScale = 'major';
 
 export const SCALES = {
-  pentatonic: { notes: ['C4','D4','E4','G4','A4','C5','D5','E5','G5','A5','C6','D6','E6'] },
-  major:      { notes: ['C4','D4','E4','F4','G4','A4','B4','C5','D5','E5','F5','G5','A5'] },
-  minor:      { notes: ['C4','D4','Eb4','F4','G4','Ab4','Bb4','C5','D5','Eb5','F5','G5','Ab5'] },
+  major: { notes: ['C4','D4','E4','F4','G4','A4','B4','C5','D5','E5','F5','G5','A5'] },
 };
 
 // Master bus: compressor + limiter prevents clipping/distortion
@@ -285,13 +283,15 @@ export function switchInstrument(name) {
 export function setInstrument(name) {
   switchInstrument(name);
   document.querySelectorAll('[id^="btn-inst-"]').forEach(b => b.classList.remove('active'));
-  document.getElementById('btn-inst-' + name).classList.add('active');
+  const instBtn = document.getElementById('btn-inst-' + name);
+  if (instBtn) instBtn.classList.add('active');
 }
 
 export function setScale(name) {
   currentScale = name;
   document.querySelectorAll('[id^="btn-scale-"]').forEach(b => b.classList.remove('active'));
-  document.getElementById('btn-scale-' + name).classList.add('active');
+  const scaleBtn = document.getElementById('btn-scale-' + name);
+  if (scaleBtn) scaleBtn.classList.add('active');
 }
 
 /** Resume context if suspended — call from animation loop or on touch events. */

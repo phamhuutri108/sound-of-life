@@ -257,34 +257,15 @@
     <div class="setting-group">
       <div class="setting-label" id="txt-instrument">Instrument</div>
       <div class="segment-control cols-4">
-        <button class="segment-btn active" id="btn-inst-ambient">
+        <button class="segment-btn" id="btn-inst-ambient">
           <span id="txt-ambient">Ambient</span>
         </button>
-        <button class="segment-btn" id="btn-inst-piano">Piano</button>
         <button class="segment-btn" id="btn-inst-marimba">Marimba</button>
         <button class="segment-btn" id="btn-inst-kalimba">Kalimba</button>
-        <button class="segment-btn" id="btn-inst-flute">Flute</button>
-        <button class="segment-btn" id="btn-inst-pluck">Pluck</button>
-        <button class="segment-btn" id="btn-inst-harpsichord">Harpsichord</button>
+        <button class="segment-btn active" id="btn-inst-flute">Flute</button>
         <button class="segment-btn" id="btn-inst-vibraphone">Vibraphone</button>
         <button class="segment-btn" id="btn-inst-theremin">Theremin</button>
         <button class="segment-btn" id="btn-inst-pad">Synth Pad</button>
-      </div>
-    </div>
-
-    <!-- Scale -->
-    <div class="setting-group">
-      <div class="setting-label" id="txt-scale">Scale</div>
-      <div class="segment-control cols-3">
-        <button class="segment-btn active" id="btn-scale-pentatonic">
-          <span id="txt-pentatonic">Pentatonic</span>
-        </button>
-        <button class="segment-btn" id="btn-scale-major">
-          <span id="txt-major">Major</span>
-        </button>
-        <button class="segment-btn" id="btn-scale-minor">
-          <span id="txt-minor">Minor</span>
-        </button>
       </div>
     </div>
 
@@ -318,14 +299,14 @@
       <div class="toggle-row">
         <span class="toggle-label" id="txt-show-clef">Treble clef (Khóa Sol)</span>
         <label class="toggle-switch">
-          <input type="checkbox" id="toggleClef">
+          <input type="checkbox" id="toggleClef" checked>
           <span class="toggle-track"><span class="toggle-knob"></span></span>
         </label>
       </div>
       <div class="toggle-row">
         <span class="toggle-label" id="txt-show-grid">Staff lines (Kẻ nhạc)</span>
         <label class="toggle-switch">
-          <input type="checkbox" id="toggleGrid" checked>
+          <input type="checkbox" id="toggleGrid">
           <span class="toggle-track"><span class="toggle-knob"></span></span>
         </label>
       </div>

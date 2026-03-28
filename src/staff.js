@@ -6,8 +6,8 @@ const ctx = canvas.getContext('2d');
 export { canvas, ctx };
 
 // Overlay visibility flags (toggled via settings)
-export let showClef = false;
-export let showGrid = true;
+export let showClef = true;
+export let showGrid = false;
 
 export function setShowClef(v) { showClef = v; }
 export function setShowGrid(v) { showGrid = v; }
@@ -87,12 +87,11 @@ export function drawStaffLines(sd, c = ctx) {
 }
 
 export function drawTrebleClef(sd, c = ctx) {
-  // Allow clef to use more of the left margin; 2.0× gives ~40% larger glyph on phones.
-  // X offset reduced (0.12 vs 0.18) so the larger glyph doesn't clip the canvas edge.
-  const maxByMargin = sd.staffLeft * 2.0;
-  const maxByHeight = (sd.staffBottom - sd.staffTop) * 0.9;
-  const clefSize = Math.min(maxByMargin, maxByHeight, 220);
-  const clefX = sd.staffLeft - clefSize * 0.12;
+  // Size the clef to match the 5-staff-lines span (indices 2–10 = 8/12 of staffHeight).
+  // No margin cap — the clef is allowed to partially clip the left canvas edge.
+  const staffSpan = sd.staffBottom - sd.staffTop;
+  const clefSize = Math.min(staffSpan * (8 / 12), 480);
+  const clefX = Math.max(clefSize * 0.28, sd.staffLeft * 0.55);
   const clefY = (sd.staffTop + sd.staffBottom) / 2;
   c.fillStyle = 'rgba(255, 255, 255, 0.55)';
   c.font = `${clefSize}px serif`;
