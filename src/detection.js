@@ -215,20 +215,24 @@ export function buildPhotoMelody(staffData, sensitivity, scanSpeed) {
     }
   }
 
-  // Pass 3: ghost note fill — organic, image-derived, non-metronomic.
-  //
-  // Strategy: walk gap-by-gap; each gap decides independently (via seeded random)
-  // whether to place a ghost note, where exactly, and at what pitch.
-  // The pitch is brightness-derived but nudged so consecutive ghosts step melodically.
-  // Some gaps are left silent on purpose — rests are part of the music.
+  _applyGhostNotes(melody, secPerStep);
+  _photoMelody = melody;
+}
+
+export function getPhotoMelody() { return _photoMelody; }
+
+// ─── Shared ghost-note fill ───────────────────────────────────────────────
+// Deterministic, brightness-derived ghost notes that step melodically through
+// silent gaps. Identical algorithm used by both column-scan and MediaPipe paths
+// so the two are musically consistent.
+function _applyGhostNotes(melody, secPerStep) {
+  const N = melody.length;
+  if (N === 0 || !_photoCache) return;
+  const M = melody[0].results.length;
   const W = _photoCacheW;
   const H = PHOTO_SCAN_H;
-  const MIN_GAP = 8; // gaps shorter than this stay silent
-
-  // Deterministic pseudo-random seeded by column index (same photo → same melody).
+  const MIN_GAP = 8;
   const _r = s => { const x = Math.sin(s * 9301 + 49297) * 233280; return x - Math.floor(x); };
-
-  // Average brightness from the middle vertical band of a column (ignores sky/ground)
   const _bright = ci => {
     const frac = Math.max(0, Math.min(1, melody[ci].x / (_photoCacheDispW || W)));
     const cx = Math.round(frac * (W - 1));
@@ -239,17 +243,14 @@ export function buildPhotoMelody(staffData, sensitivity, scanSpeed) {
       for (let x = x0; x <= x1; x++) { s += _photoCache[y * W + x]; c++; }
     return c ? s / c : 128;
   };
-
-  let prevNi = -1; // track last ghost pitch for melodic stepping
-
+  let prevNi = -1;
   const _place = (ci, seed) => {
+    if (ci < 0 || ci >= N) return;
     const bright = _bright(ci);
-    // Base pitch from brightness; nudge up/down by 0-2 so melody moves naturally
     const dir   = _r(seed + 3) > 0.5 ? 1 : -1;
-    const steps = Math.round(_r(seed + 4) * 2); // 0, 1, or 2
+    const steps = Math.round(_r(seed + 4) * 2);
     let ni = Math.round((bright / 255) * (M - 1)) + dir * steps;
     ni = Math.max(0, Math.min(M - 1, ni));
-    // Avoid repeating the same pitch as the previous ghost
     if (ni === prevNi) ni = Math.max(0, Math.min(M - 1, ni + dir));
     prevNi = ni;
     melody[ci].results[ni].detected     = true;
@@ -258,26 +259,18 @@ export function buildPhotoMelody(staffData, sensitivity, scanSpeed) {
     melody[ci].results[ni].confidence   = 0.0; // minimum velocity — subtle
     melody[ci].results[ni].isGhost      = true;
   };
-
-  // Walk gaps; each gap makes its own independent decision
   let gapStart = -1;
   for (let i = 0; i <= N; i++) {
     const isEmpty = i < N && !melody[i].results.some(r => r.isNoteStart);
     if (isEmpty && gapStart === -1) { gapStart = i; continue; }
     if ((!isEmpty || i === N) && gapStart !== -1) {
       const gapLen = i - gapStart;
-      const seed   = gapStart * 13; // unique seed per gap
-
+      const seed   = gapStart * 13;
       if (gapLen >= MIN_GAP) {
-        // 75% chance this gap gets any ghost at all — natural silence preserved
         if (_r(seed) < 0.75) {
-          // Where in the gap? Random position skewed away from edges
-          const t1 = 0.2 + _r(seed + 1) * 0.6; // 20%–80% into gap
+          const t1 = 0.2 + _r(seed + 1) * 0.6;
           _place(Math.floor(gapStart + gapLen * t1), seed + 10);
-
-          // Long gaps (≥ 2× MIN_GAP) may get a second note — 60% chance
           if (gapLen >= MIN_GAP * 2 && _r(seed + 2) < 0.6) {
-            // Second note in the other half of the gap, not too close to first
             const half = t1 < 0.5 ? 0.5 + _r(seed + 5) * 0.35 : 0.15 + _r(seed + 5) * 0.35;
             _place(Math.floor(gapStart + gapLen * half), seed + 20);
           }
@@ -286,11 +279,65 @@ export function buildPhotoMelody(staffData, sensitivity, scanSpeed) {
       gapStart = -1;
     }
   }
-
-  _photoMelody = melody;
 }
 
-export function getPhotoMelody() { return _photoMelody; }
+/**
+ * Build a photo melody using the MediaPipe segmentation mask.
+ * Called after resetPhotoMask() + runInference() completes — upgrades the
+ * column-scan melody that was built immediately on photo load.
+ * Uses the same run-length encoding and ghost-note fill as buildPhotoMelody.
+ */
+export function buildPhotoMelodyFromMediaPipe(staffData, sensitivity, scanSpeed) {
+  if (!staffData) { _photoMelody = null; return; }
+  const step = Math.max(1, Math.round(staffData.spacing / 2));
+  const spd = scanSpeed || 1;
+  const secPerStep = step / (spd * 60);
+  const N_pos = staffData.positions.length;
+
+  // Pass 1: scan every column via mask → 13-element result arrays
+  const melody = [];
+  for (let x = staffData.staffLeft; x <= staffData.staffRight; x += step) {
+    const results = staffData.positions.map((pos, i) => ({
+      detected: false, confidence: 0,
+      y: pos.y, noteIndex: i,
+      isNoteStart: false, durationSecs: null, isGhost: false,
+    }));
+    const transitions = getEdgeTransitions(staffData, x, sensitivity);
+    if (transitions && transitions.length > 0) {
+      for (const t of transitions) {
+        const ni = yToNoteIndex(t.y, staffData);
+        if (ni >= 0 && ni < N_pos) {
+          results[ni].detected   = true;
+          results[ni].confidence = t.confidence;
+          results[ni].y          = t.y;
+        }
+      }
+    }
+    melody.push({ x, results });
+  }
+
+  // Pass 2: run-length encoding → mark isNoteStart + durationSecs
+  const Mel = melody.length;
+  if (Mel === 0) { _photoMelody = melody; return; }
+  for (let ni = 0; ni < N_pos; ni++) {
+    let runStart = -1;
+    for (let i = 0; i <= Mel; i++) {
+      const detected = i < Mel && melody[i].results[ni].detected;
+      if (detected && runStart === -1) {
+        runStart = i;
+      } else if (!detected && runStart !== -1) {
+        const durationSecs = Math.max(0.08, (i - runStart) * secPerStep);
+        melody[runStart].results[ni].isNoteStart = true;
+        melody[runStart].results[ni].durationSecs = durationSecs;
+        runStart = -1;
+      }
+    }
+  }
+
+  // Pass 3: ghost note fill (same algorithm as buildPhotoMelody)
+  _applyGhostNotes(melody, secPerStep);
+  _photoMelody = melody;
+}
 
 /**
  * Multi-signal detection at a scan column:

@@ -199,15 +199,6 @@ export function renderStaff(scanX, detectionResults, staffData, isPlaying) {
     drawScanLine(scanX, sd);
   }
 
-  // All 13 passive dots in one batched path → single fill() call
-  ctx.fillStyle = 'rgba(255,255,255,0.18)';
-  ctx.beginPath();
-  for (const pos of sd.positions) {
-    ctx.moveTo(scanX + 3.5, pos.y);
-    ctx.arc(scanX, pos.y, 3.5, 0, Math.PI * 2);
-  }
-  ctx.fill();
-
   // Active note indicators
   if (detectionResults) {
     for (const r of detectionResults) {

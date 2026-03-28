@@ -28,11 +28,11 @@ import {
   detectObjects as _detectObjects,
   loadOpenCVIfNeeded,
   buildPhotoScanCache, clearPhotoScanCache,
-  buildPhotoMelody, getPhotoMelody,
+  buildPhotoMelody, getPhotoMelody, buildPhotoMelodyFromMediaPipe,
   captureLiveStrip,
 } from './detection.js';
 import {
-  setSmartProfile, loadSmartModel, isSmartReady, resetPhotoMask,
+  setSmartProfile, loadSmartModel, isSmartReady, isPhotoMaskCached, resetPhotoMask, runInference,
 } from './smartDetection.js';
 
 /* ═══════════════════════════════════════════════════════════════
@@ -82,10 +82,22 @@ function applyPhotoBounds() {
   staffData = resizeCanvas(bounds);
   if (staffData) {
     scanX = staffData.staffLeft;
-    resetPhotoMask(); // clear stale MediaPipe mask so inference re-runs on the new photo
-    buildPhotoScanCache(photoImgEl, staffData); // pre-scan once; per-column reads are instant
-    buildPhotoMelody(staffData, sensitivity, scanSpeed); // pre-build full melody — zero detection during playback
+    resetPhotoMask();
+    buildPhotoScanCache(photoImgEl, staffData);
+    buildPhotoMelody(staffData, sensitivity, scanSpeed); // immediate column-scan melody
     _photoMelodyIdx = 0;
+    // When MediaPipe model is loaded, re-infer once and silently upgrade to higher-quality melody
+    if (isSmartReady() && photoImgEl) {
+      const _sd = staffData;
+      runInference(photoImgEl, {
+        appMode: 'photo',
+        staffData: _sd,
+        onMaskReady: () => {
+          buildPhotoMelodyFromMediaPipe(_sd, sensitivity, scanSpeed);
+          _photoMelodyIdx = 0;
+        },
+      });
+    }
   }
 }
 
@@ -477,81 +489,42 @@ function animationLoop(now) {
   if (!_liveVideoEl) _liveVideoEl = document.getElementById('cameraVideo');
   const video = _liveVideoEl;
 
-  // ── Photo mode ──────────────────────────────────────────────────────────
+  // ── Photo mode: play from pre-built melody ──────────────────────────────
+  // Melody is built immediately from column-scan (no wait), then silently
+  // upgraded to MediaPipe quality via onMaskReady callback in applyPhotoBounds.
   if (appMode === 'photo' && photoDataURL) {
-    if (isSmartReady()) {
-      // MediaPipe path: per-frame throttled detection (mask is computed once per photo)
-      const activeInterval = getDetectionInterval();
-      if (now - lastDetectionTime > activeInterval) {
-        lastDetectionTime = now;
-        const freshResults = _detectObjects({
-          appMode,
-          photoImgEl,
-          staffData,
-          scanX: curScanX,
-          sensitivity,
-        });
-        if (freshResults !== null) {
-          lastDetectionResults = freshResults;
-        }
-        if (lastDetectionResults && isAudioReady()) {
-          const strongestConf = {};
-          for (const result of lastDetectionResults) {
-            if (!result.detected) continue;
-            const noteIdx = result.noteIndex ?? 0;
-            if (strongestConf[noteIdx] === undefined || result.confidence > strongestConf[noteIdx]) {
-              strongestConf[noteIdx] = result.confidence;
-            }
-          }
-          const keys = Object.keys(strongestConf);
-          keys.sort((a, b) => strongestConf[b] - strongestConf[a]);
-          const limit = Math.min(keys.length, MAX_NOTES_PER_PASS);
-          for (let ki = 0; ki < limit; ki++) {
-            if (now - lastAnyNoteTime < GLOBAL_NOTE_GAP_MS) break;
-            const noteIdx = +keys[ki];
-            const noteId = `edge_note_${noteIdx}`;
-            if (!shouldTriggerNote(noteId, now, NOTE_COOLDOWN_MS)) continue;
-            playNote(getNoteForPosition(noteIdx), confidenceToVelocity(strongestConf[noteIdx]));
-            lastAnyNoteTime = now;
-          }
-        }
+    const melody = getPhotoMelody();
+    if (melody && melody.length > 0) {
+      while (_photoMelodyIdx < melody.length - 1 && melody[_photoMelodyIdx + 1].x <= curScanX) {
+        _photoMelodyIdx++;
       }
-    } else {
-      // Fallback: pre-built melody from column-scan (used while MediaPipe model loads)
-      const melody = getPhotoMelody();
-      if (melody && melody.length > 0) {
-        // Advance melody index to whichever entry is closest to curScanX
-        while (_photoMelodyIdx < melody.length - 1 && melody[_photoMelodyIdx + 1].x <= curScanX) {
-          _photoMelodyIdx++;
-        }
-        const entry = melody[_photoMelodyIdx];
-        // Only fire notes when the melody entry aligns with the current scan position
-        if (Math.abs(entry.x - curScanX) <= scanSpeed + 1) {
-          lastDetectionResults = entry.results;
-          if (isAudioReady()) {
-            // Only trigger at the start of a detected run; duration = object width in time
-            const strongestConf = {};
-            const strongestDur  = {};
-            for (const result of entry.results) {
-              if (!result.detected || !result.isNoteStart) continue;
-              const noteIdx = result.noteIndex ?? 0;
-              if (strongestConf[noteIdx] === undefined || result.confidence > strongestConf[noteIdx]) {
-                strongestConf[noteIdx] = result.confidence;
-                strongestDur[noteIdx]  = result.durationSecs ?? null;
-              }
-            }
-            const keys = Object.keys(strongestConf);
-            keys.sort((a, b) => strongestConf[b] - strongestConf[a]);
-            const limit = Math.min(keys.length, MAX_NOTES_PER_PASS);
-            for (let ki = 0; ki < limit; ki++) {
-              if (now - lastAnyNoteTime < GLOBAL_NOTE_GAP_MS) break;
-              const noteIdx = +keys[ki];
-              const noteId = `edge_note_${noteIdx}`;
-              if (!shouldTriggerNote(noteId, now, NOTE_COOLDOWN_MS)) continue;
-              playNote(getNoteForPosition(noteIdx), confidenceToVelocity(strongestConf[noteIdx]), strongestDur[noteIdx]);
-              lastAnyNoteTime = now;
-            }
+      const entry = melody[_photoMelodyIdx];
+      // Keep visual in sync: update detected positions on the playhead
+      if (Math.abs(entry.x - curScanX) <= scanSpeed + 2) {
+        lastDetectionResults = entry.results;
+      }
+      // Fire notes only at the start of each detected run
+      if (Math.abs(entry.x - curScanX) <= scanSpeed + 1 && isAudioReady()) {
+        const strongestConf = {};
+        const strongestDur  = {};
+        for (const result of entry.results) {
+          if (!result.detected || !result.isNoteStart) continue;
+          const noteIdx = result.noteIndex ?? 0;
+          if (strongestConf[noteIdx] === undefined || result.confidence > strongestConf[noteIdx]) {
+            strongestConf[noteIdx] = result.confidence;
+            strongestDur[noteIdx]  = result.durationSecs ?? null;
           }
+        }
+        const keys = Object.keys(strongestConf);
+        keys.sort((a, b) => strongestConf[b] - strongestConf[a]);
+        const limit = Math.min(keys.length, MAX_NOTES_PER_PASS);
+        for (let ki = 0; ki < limit; ki++) {
+          if (now - lastAnyNoteTime < GLOBAL_NOTE_GAP_MS) break;
+          const noteIdx = +keys[ki];
+          const noteId = `edge_note_${noteIdx}`;
+          if (!shouldTriggerNote(noteId, now, NOTE_COOLDOWN_MS)) continue;
+          playNote(getNoteForPosition(noteIdx), confidenceToVelocity(strongestConf[noteIdx]), strongestDur[noteIdx]);
+          lastAnyNoteTime = now;
         }
       }
     }
@@ -1049,7 +1022,11 @@ function wireUI() {
   document.getElementById('sensitivitySlider').addEventListener('input', e => {
     sensitivity = parseInt(e.target.value);
     if (appMode === 'photo' && staffData) {
-      buildPhotoMelody(staffData, sensitivity, scanSpeed);
+      if (isPhotoMaskCached()) {
+        buildPhotoMelodyFromMediaPipe(staffData, sensitivity, scanSpeed);
+      } else {
+        buildPhotoMelody(staffData, sensitivity, scanSpeed);
+      }
       _photoMelodyIdx = 0;
     }
   });

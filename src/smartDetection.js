@@ -62,6 +62,10 @@ export function isSmartReady() {
   return !!segmenter;
 }
 
+export function isPhotoMaskCached() {
+  return photoMaskCached;
+}
+
 export function isSmartLoading() {
   return loading;
 }
@@ -293,7 +297,10 @@ export function runInference(imageSource, opts = {}) {
         segmenter.segmentForVideo(roiCanvas, now, (result) => {
           try {
             readForegroundMask(result);
-            if (opts.appMode === 'photo') photoMaskCached = true;
+            if (opts.appMode === 'photo') {
+              photoMaskCached = true;
+              if (typeof opts.onMaskReady === 'function') opts.onMaskReady();
+            }
             if (typeof result?.close === 'function') result.close();
           } catch { /* ignore */ }
           inferenceInFlight = false;
@@ -304,6 +311,7 @@ export function runInference(imageSource, opts = {}) {
         readForegroundMask(result);
         if (typeof result?.close === 'function') result.close();
         photoMaskCached = true;
+        if (typeof opts.onMaskReady === 'function') opts.onMaskReady();
         inferenceInFlight = false;
       }
     } catch {
