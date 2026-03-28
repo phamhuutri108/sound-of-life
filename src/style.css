@@ -915,14 +915,15 @@ button, .toolbar-btn, .segment-btn, .top-btn {
   /* Hide text labels — no room in narrow sidebar */
   .toolbar-btn > span:last-child { display: none; }
 
-  /* In landscape, toolbar is a right sidebar → put capture btn at bottom-center of remaining area */
+  /* In landscape, toolbar is a right sidebar → put capture btn to the left of sidebar, vertically centered */
   .capture-btn {
     width: 50px;
     height: 50px;
-    bottom: max(16px, env(safe-area-inset-bottom));
-    left: 50%;
-    right: auto;
-    transform: translateX(calc(-50% - (32px + max(0px, env(safe-area-inset-right)) / 2)));
+    bottom: auto;
+    top: 50%;
+    left: auto;
+    right: calc(64px + max(0px, env(safe-area-inset-right)) + 10px);
+    transform: translateY(-50%);
   }
   .toolbar-btn { padding: 8px; min-width: auto; min-height: 36px; }
 }
