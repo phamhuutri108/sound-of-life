@@ -6,7 +6,7 @@ import {
   setInstrument, setScale,
   playNote, getNoteForPosition, confidenceToVelocity,
   releaseAllInstruments,
-  isAudioReady,
+  isAudioReady, resumeAudioIfSuspended,
 } from './audio.js';
 import {
   startCamera, flipCamera as _flipCamera, setCameraFacing as _setCameraFacing,
@@ -427,23 +427,32 @@ function animationLoop(now) {
   // Scan line advances at full 60 fps so speed is constant regardless of render rate
   const curScanX = advanceScanLine();
 
-  // Detection (throttled)
-  const activeInterval = getDetectionInterval();
-  if (now - lastDetectionTime > activeInterval) {
-    lastDetectionTime = now;
+  // Periodically resume AudioContext if iOS suspended it during inactivity
+  if ((now & 4095) < 16) resumeAudioIfSuspended(); // ~every 4 s at 60 fps
 
-    // Only detect when we have a source
-    if (!_liveVideoEl) _liveVideoEl = document.getElementById('cameraVideo');
-    const video = _liveVideoEl;
+  // Detection (throttled)
+  if (!_liveVideoEl) _liveVideoEl = document.getElementById('cameraVideo');
+  const video = _liveVideoEl;
+  const activeInterval = getDetectionInterval();
+  let runDetection = now - lastDetectionTime > activeInterval;
+
+  if (runDetection) {
+    lastDetectionTime = now;
     // In live mode, skip detection if the camera hasn't produced a new frame yet.
     // Uses rVFC timestamp when available (exact); falls back to currentTime.
     if (appMode === 'live' && video.readyState >= 2) {
       const vt = _rvfcSupported ? _latestVideoFrame : video.currentTime;
-      if (vt === _lastDetectedVideoTime) { lastDetectionTime = now - activeInterval + 16; return; }
-      _lastDetectedVideoTime = vt;
-      // Start rVFC on first detection if not already running
-      if (!_rvfcSupported) _scheduleRVFC();
+      if (vt === _lastDetectedVideoTime) {
+        lastDetectionTime = now - activeInterval + 16;
+        runDetection = false; // no new frame — skip detection but still render below
+      } else {
+        _lastDetectedVideoTime = vt;
+        if (!_rvfcSupported) _scheduleRVFC();
+      }
     }
+  }
+
+  if (runDetection) {
     const hasSource = (appMode === 'photo' && photoDataURL) || (appMode === 'live' && video.readyState >= 2);
     if (hasSource) {
       lastDetectionResults = _detectObjects({

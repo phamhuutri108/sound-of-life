@@ -216,6 +216,19 @@ function ensureInstrument(name) {
   }
 }
 
+let _keepAlive = null;
+function _startKeepAlive() {
+  if (_keepAlive) return;
+  try {
+    // A sub-audio-frequency silent oscillator keeps the iOS AudioContext in 'running'
+    // state — without it iOS suspends the context after ~30 s of silence.
+    _keepAlive = new Tone.Oscillator(1, 'sine'); // 1 Hz — completely inaudible
+    _keepAlive.volume.value = -Infinity;
+    _keepAlive.toDestination();
+    _keepAlive.start();
+  } catch (_) {}
+}
+
 export function setupInstruments() {
   masterBus = createMasterBus();
   // On mobile: only create the default instrument now — others are created on first use.
@@ -225,6 +238,7 @@ export function setupInstruments() {
   } else {
     Object.keys(_instrumentFactories).forEach(n => ensureInstrument(n));
   }
+  _startKeepAlive();
 }
 
 export function initAudio() {
@@ -267,12 +281,26 @@ export function setScale(name) {
   document.getElementById('btn-scale-' + name).classList.add('active');
 }
 
+/** Resume context if suspended — call from animation loop or on touch events. */
+export function resumeAudioIfSuspended() {
+  if (!audioReady) return;
+  const state = Tone.getContext().state;
+  if (state === 'suspended' || state === 'interrupted') {
+    Tone.getContext().resume().catch(() => {});
+  }
+}
+
 export function playNote(note, velocity = 0.7) {
   const synth = instruments[currentInstrument];
-  if (synth && audioReady) {
-    const dur = INSTRUMENT_NOTE_DURATIONS[currentInstrument] || '8n';
-    synth.triggerAttackRelease(note, dur, Tone.now(), Math.min(1.0, velocity));
+  if (!synth || !audioReady) return;
+  // iOS can suspend the AudioContext after inactivity; resume and drop this note
+  // (context will be running for the next detection cycle ~300 ms later).
+  if (Tone.getContext().state !== 'running') {
+    Tone.getContext().resume().catch(() => {});
+    return;
   }
+  const dur = INSTRUMENT_NOTE_DURATIONS[currentInstrument] || '8n';
+  synth.triggerAttackRelease(note, dur, Tone.now(), Math.min(1.0, velocity));
 }
 
 export function getNoteForPosition(idx) {
