@@ -479,20 +479,31 @@ function _scheduleRVFC() {
   }
 }
 
+// Schedule the next animation frame.
+// Photo mode on mobile uses setTimeout+rAF so the CPU can enter deep sleep
+// between frames — rAF alone wakes the CPU 60×/sec even when we early-return.
+// Live mode always uses bare rAF for smooth camera preview responsiveness.
+function _scheduleFrame() {
+  if (_isMobile && appMode === 'photo' && photoDataURL) {
+    // True 12 fps: 83 ms sleep lets the CPU cool between frames.
+    // rAF inside setTimeout gives an accurate `now` timestamp + compositor sync.
+    setTimeout(() => requestAnimationFrame(animationLoop), 83);
+  } else {
+    requestAnimationFrame(animationLoop);
+  }
+}
+
 function animationLoop(now) {
-  requestAnimationFrame(animationLoop);
+  _scheduleFrame();
   if (!_pageVisible) return; // tab hidden — skip everything
 
-  // On mobile: cap work to ~30 fps so the CPU runs cooler.
-  // We still re-schedule rAF every frame so the loop stays responsive.
-  // Use a large initial dt so the very first frame always passes the mobile gate.
-  // If we used 16.67 (one 60fps frame) as fallback, it would be < FRAME_TARGET_MS(33)
-  // forever because _lastAnimTime never gets set past the gate — loop stuck on mobile.
-  const dt = _lastAnimTime > 0 ? Math.min(now - _lastAnimTime, 100) : 100;
-  // Photo mode on mobile: cap at 24fps (42ms) — scan speed is dt-based so music is unaffected.
-  // Live mode stays at 30fps (33ms) for smooth camera preview.
-  const _frameTarget = (_isMobile && appMode === 'photo' && photoDataURL) ? 42 : FRAME_TARGET_MS;
-  if (_frameTarget > 0 && dt < _frameTarget - 1) return;
+  // dt for time-based scan advancement (music speed is frame-rate independent).
+  // Large initial fallback so the very first frame is never gated.
+  const dt = _lastAnimTime > 0 ? Math.min(now - _lastAnimTime, 150) : 100;
+
+  // Live mode still uses the 30 fps gate (rAF fires at 60 Hz, we halve it).
+  // Photo mode rate is already controlled by setTimeout above — no early-return needed.
+  if (appMode === 'live' && FRAME_TARGET_MS > 0 && dt < FRAME_TARGET_MS - 1) return;
   _lastAnimTime = now;
 
   // FPS tracking + MediaPipe profile tuning are only needed in live mode.
