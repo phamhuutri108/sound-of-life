@@ -371,6 +371,33 @@ button, .toolbar-btn, .segment-btn, .top-btn {
   text-transform: uppercase;
 }
 
+/* Start button (replaces mode cards) */
+.splash-start-btn {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 48px;
+  padding: 14px 44px;
+  border: 1px solid var(--border-active);
+  border-radius: 50px;
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-primary);
+  font-family: var(--font-ui);
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: background 0.2s, border-color 0.2s;
+  animation: fadeInUp 1.2s ease-out 0.6s both;
+}
+.splash-start-btn:hover,
+.splash-start-btn:active {
+  background: var(--accent-gold-dim);
+  border-color: var(--border-active);
+}
+
 /* ═══════════════════════════════════════
    CAMERA VIEW
 ═══════════════════════════════════════ */

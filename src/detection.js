@@ -211,6 +211,45 @@ export function buildPhotoMelody(staffData, sensitivity, scanSpeed) {
       }
     }
   }
+
+  // Pass 3: ghost note fill.
+  // Columns with zero real detected notes get a subtle ghost note derived from
+  // column brightness: dark column → low pitch, bright column → high pitch.
+  // Ghost notes fire every GHOST_EVERY empty columns so they don't cluster.
+  // They fill melodic gaps so even sparse/uniform images produce flowing music.
+  const W = _photoCacheW;
+  const H = PHOTO_SCAN_H;
+  const GHOST_EVERY = 4; // one ghost note per 4 empty columns
+  const GHOST_DURATION = secPerStep * 3; // 3× step width — enough for sustained instruments
+  let emptyStreak = 0;
+  for (let i = 0; i < N; i++) {
+    const hasRealNote = melody[i].results.some(r => r.isNoteStart);
+    if (hasRealNote) { emptyStreak = 0; continue; }
+    emptyStreak++;
+    if (emptyStreak % GHOST_EVERY !== 0) continue;
+
+    // Compute average brightness for this column from the photo cache
+    const frac = Math.max(0, Math.min(1, melody[i].x / (_photoCacheDispW || W)));
+    const cx   = Math.round(frac * (W - 1));
+    const x0   = Math.max(0, cx - 2), x1 = Math.min(W - 1, cx + 2);
+    let brightSum = 0, brightCnt = 0;
+    for (let y = 0; y < H; y++) {
+      for (let x = x0; x <= x1; x++) {
+        brightSum += _photoCache[y * W + x];
+        brightCnt++;
+      }
+    }
+    const avgBright = brightCnt > 0 ? brightSum / brightCnt : 128;
+
+    // Map brightness → note index: dark (0) = low note (0), bright (255) = high note (M-1)
+    const ni = Math.round((avgBright / 255) * (M - 1));
+    melody[i].results[ni].detected    = true;
+    melody[i].results[ni].isNoteStart = true;
+    melody[i].results[ni].durationSecs = GHOST_DURATION;
+    melody[i].results[ni].confidence  = 0.0; // minimum velocity (~0.42) — subtle
+    melody[i].results[ni].isGhost     = true;
+  }
+
   _photoMelody = melody;
 }
 

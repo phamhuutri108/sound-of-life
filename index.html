@@ -65,34 +65,13 @@
     <div class="splash-title" id="txt-app-title">Sound of Life</div>
     <div class="splash-subtitle" id="txt-tagline">Bống Bống Bông Bông, lên ăn cơm vàng, cơm bạc nhà ta.</div>
 
-    <!-- Mode cards — directly on splash -->
-    <div class="splash-modes">
-      <div class="splash-mode-label" id="txt-choose-mode">Choose your mode</div>
-      <div class="mode-cards-row">
-        <div class="mode-card" id="modeCardPhoto">
-          <!-- Aperture / shutter icon -->
-          <svg width="44" height="44" viewBox="0 0 44 44" fill="none" stroke="rgba(240,237,232,0.7)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-            <circle cx="22" cy="22" r="10"/>
-            <line x1="22" y1="12" x2="22" y2="6"/>
-            <line x1="22" y1="38" x2="22" y2="32"/>
-            <line x1="12" y1="22" x2="6" y2="22"/>
-            <line x1="38" y1="22" x2="32" y2="22"/>
-            <line x1="14.9" y1="14.9" x2="10.4" y2="10.4"/>
-            <line x1="33.6" y1="33.6" x2="29.1" y2="29.1"/>
-            <line x1="29.1" y1="14.9" x2="33.6" y2="10.4"/>
-            <line x1="10.4" y1="33.6" x2="14.9" y2="29.1"/>
-          </svg>
-          <div class="mode-card-title" id="txt-photo-mode">Photo</div>
-        </div>
-        <div class="mode-card" id="modeCardLive">
-          <!-- Waveform / live icon -->
-          <svg width="44" height="44" viewBox="0 0 44 44" fill="none" stroke="rgba(240,237,232,0.7)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-            <polyline points="4,22 10,14 16,30 22,10 28,34 34,18 40,22"/>
-          </svg>
-          <div class="mode-card-title" id="txt-live-mode">Live</div>
-        </div>
-      </div>
-    </div>
+    <!-- Single start button -->
+    <button class="splash-start-btn" id="startBtn">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+        <polygon points="3,2 14,8 3,14"/>
+      </svg>
+      <span id="txt-start">Start</span>
+    </button>
 
     <div class="splash-lang">
       <button class="lang-btn active" id="langEN">EN</button>
@@ -246,8 +225,8 @@
       </button>
       <input type="file" accept="image/*" id="photoImport" style="display:none">
 
-      <!-- Mode switch -->
-      <button class="toolbar-btn" id="switchBtn">
+      <!-- Mode switch (hidden — live mode is not exposed) -->
+      <button class="toolbar-btn" id="switchBtn" style="display:none">
         <span class="toolbar-btn-icon">
           <svg width="22" height="22" viewBox="0 0 22 22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
             <rect x="3" y="3" width="7" height="7" rx="1.5"/>

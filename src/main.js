@@ -949,9 +949,8 @@ function wireUI() {
   document.getElementById('langEN').addEventListener('click', () => setLanguage('en', { isPlaying, onLangChange: updateA2HSHint }));
   document.getElementById('langVI').addEventListener('click', () => setLanguage('vi', { isPlaying, onLangChange: updateA2HSHint }));
 
-  // Mode select
-  document.getElementById('modeCardPhoto').addEventListener('click', () => selectMode('photo'));
-  document.getElementById('modeCardLive').addEventListener('click', () => selectMode('live'));
+  // Start button (photo mode only — live mode hidden)
+  document.getElementById('startBtn').addEventListener('click', () => selectMode('photo'));
 
   // Top bar
   document.getElementById('backBtn').addEventListener('click', goHome);
