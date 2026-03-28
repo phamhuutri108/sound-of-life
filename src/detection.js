@@ -164,7 +164,57 @@ export function clearPhotoScanCache() {
   _photoCacheW   = 0;
   _photoBgBright = -1;
   _photoAvgSat   = 0;
+  _photoMelody   = null;
 }
+
+// ─── Pre-built photo melody ────────────────────────────────────────────────
+// Scan every column once upfront; animation loop reads from this array —
+// zero detection cost during playback, and the melody is perfectly consistent.
+let _photoMelody = null; // Array<{ x: number, results: DetectionResult[] }>
+
+/**
+ * Build a complete melody for the current photo.
+ * scanSpeed (px/frame at 60 fps) is used to convert run-length → real seconds,
+ * so sustained instruments hold notes for exactly as long as the object is wide.
+ */
+export function buildPhotoMelody(staffData, sensitivity, scanSpeed) {
+  if (!_photoCache || !staffData) { _photoMelody = null; return; }
+  const step = Math.max(1, Math.round(staffData.spacing / 2));
+  const spd = scanSpeed || 1;
+  const secPerStep = step / (spd * 60); // px/step ÷ (px/frame × 60 frames/s) = seconds
+
+  // Pass 1: detect every column
+  const melody = [];
+  for (let x = staffData.staffLeft; x <= staffData.staffRight; x += step) {
+    const results = detectAtScanLine(null, staffData, x, sensitivity);
+    if (results) melody.push({ x, results });
+  }
+
+  // Pass 2: per note-position, find contiguous detected runs,
+  //         mark isNoteStart + durationSecs only on the first column of each run.
+  const N = melody.length;
+  if (N === 0) { _photoMelody = melody; return; }
+  const M = melody[0].results.length;
+  for (let ni = 0; ni < M; ni++) {
+    // default: not a start
+    for (let i = 0; i < N; i++) melody[i].results[ni].isNoteStart = false;
+    let runStart = -1;
+    for (let i = 0; i <= N; i++) {
+      const detected = i < N && melody[i].results[ni].detected;
+      if (detected && runStart === -1) {
+        runStart = i;
+      } else if (!detected && runStart !== -1) {
+        const durationSecs = Math.max(0.08, (i - runStart) * secPerStep);
+        melody[runStart].results[ni].isNoteStart = true;
+        melody[runStart].results[ni].durationSecs = durationSecs;
+        runStart = -1;
+      }
+    }
+  }
+  _photoMelody = melody;
+}
+
+export function getPhotoMelody() { return _photoMelody; }
 
 /**
  * Multi-signal detection at a scan column:
@@ -214,55 +264,10 @@ function detectAtScanLine(source, staffData, scanX, sensitivity) {
     avgSat   = _liveAvgSat;
 
   } else {
-    // ── Fallback live path ────────────────────────────────────────────────
-    const srcW = source.videoWidth || source.naturalWidth || source.width || dispW;
-    const srcH = source.videoHeight || source.naturalHeight || source.height || dispH;
-    if (!srcW || !srcH) return null;
-
-    const fraction  = Math.max(0, Math.min(1, scanX / dispW));
-    const srcCX     = fraction * srcW;
-    const srcHalf   = Math.max(1, Math.round(5 * srcW / dispW));
-    const srcX0     = Math.max(0, Math.round(srcCX - srcHalf));
-    const srcStripW = Math.min(srcHalf * 2 + 1, srcW - srcX0);
-    if (srcStripW <= 0) return null;
-
-    if (colCanvas.height !== H) colCanvas.height = H;
-    colCtx.drawImage(source, srcX0, 0, srcStripW, srcH, 0, 0, 11, H);
-    const imgData = colCtx.getImageData(0, 0, 11, H);
-    const px = imgData.data;
-
-    smB   = _smBBuf;
-    smSat = _smSatBuf;
-    for (let y = 0; y < H; y++) {
-      let sB = 0, sSat = 0;
-      for (let x = 0; x < 11; x++) {
-        const i = (y * 11 + x) * 4;
-        const r = px[i], g = px[i + 1], b = px[i + 2];
-        sB   += 0.299 * r + 0.587 * g + 0.114 * b;
-        sSat += _sat(r, g, b);
-      }
-      _rowBBuf[y]   = sB   / 11;
-      _rowSatBuf[y] = sSat / 11;
-    }
-    for (let y = 0; y < H; y++) {
-      let s = 0, ss = 0, c = 0;
-      for (let dy = -2; dy <= 2; dy++) {
-        const yy = y + dy;
-        if (yy >= 0 && yy < H) { s += _rowBBuf[yy]; ss += _rowSatBuf[yy]; c++; }
-      }
-      smB[y]   = s  / c;
-      smSat[y] = ss / c;
-    }
-
-    let sum = 0, sumSq = 0, satSum = 0;
-    for (let i = 0; i < H; i++) {
-      const v = smB[i];
-      sum += v; sumSq += v * v;
-      satSum += smSat[i];
-    }
-    const mean = sum / H;
-    bgBright = Math.max(mean, mean + 0.84 * Math.sqrt(Math.max(0, sumSq / H - mean * mean)));
-    avgSat   = satSum / H;
+    // No fresh live cache available — caller should retry next cycle.
+    // Returning null avoids a GPU→CPU stall (drawImage+getImageData) on the main thread,
+    // which is far more disruptive than skipping one detection cycle.
+    return null;
   }
 
   // Threshold: lower base + sensitivity range gives finer control

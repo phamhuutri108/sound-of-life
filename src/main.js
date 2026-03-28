@@ -28,11 +28,21 @@ import {
   detectObjects as _detectObjects,
   loadOpenCVIfNeeded,
   buildPhotoScanCache, clearPhotoScanCache,
+  buildPhotoMelody, getPhotoMelody,
   captureLiveStrip,
 } from './detection.js';
 import {
   setSmartProfile,
 } from './smartDetection.js';
+
+/* ═══════════════════════════════════════════════════════════════
+   DEVICE DETECTION
+═══════════════════════════════════════════════════════════════ */
+const _isMobile = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent || '');
+// On mobile: cap the animation loop to ~30 fps so the CPU can run cooler.
+// Time-based scan advancement keeps the visual scan speed identical regardless.
+const FRAME_TARGET_MS = _isMobile ? 33 : 0; // 0 = uncapped on desktop
+let _lastAnimTime = 0;
 
 /* ═══════════════════════════════════════════════════════════════
    APP STATE
@@ -73,6 +83,8 @@ function applyPhotoBounds() {
   if (staffData) {
     scanX = staffData.staffLeft;
     buildPhotoScanCache(photoImgEl, staffData); // pre-scan once; per-column reads are instant
+    buildPhotoMelody(staffData, sensitivity, scanSpeed); // pre-build full melody — zero detection during playback
+    _photoMelodyIdx = 0;
   }
 }
 
@@ -80,6 +92,7 @@ function applyPhotoBounds() {
    SCAN LINE STATE
 ═══════════════════════════════════════════════════════════════ */
 let scanX = 0;
+let _photoMelodyIdx = 0; // current position within pre-built photo melody array
 // Speed formula: (val * 0.8 + 0.5) * 0.7 — 30% slower than original across all levels
 // val=1 (default/slowest) → 0.91 px/frame; val=5 (fastest) → 3.15 px/frame
 let scanSpeed = 0.91; // matches slider default value=1
@@ -88,11 +101,14 @@ function setScanSpeed(val) {
   scanSpeed = (parseFloat(val) * 0.8 + 0.5) * 0.7;
 }
 
-function advanceScanLine() {
+function advanceScanLine(dt) {
   if (!staffData) return scanX;
-  scanX += scanSpeed;
+  // Time-based: scanSpeed is calibrated for 60 fps (16.67 ms/frame).
+  // Multiplying by dt/16.67 makes movement identical at any frame rate.
+  scanX += scanSpeed * (dt / 16.67);
   if (scanX > staffData.staffRight) {
     scanX = staffData.staffLeft;
+    _photoMelodyIdx = 0;
     Object.keys(noteCooldowns).forEach(k => delete noteCooldowns[k]);
   }
   return scanX;
@@ -395,17 +411,19 @@ document.addEventListener('visibilitychange', () => {
 // requestVideoFrameCallback: sync detection to actual camera frames on supported browsers
 let _rvfcSupported = false;
 let _latestVideoFrame = null; // set by rVFC callback, read in animationLoop
+// Flag set by animation loop ~50 ms before detection is due, cleared by rVFC after capture.
+// This coordinates the two callbacks so getImageData only runs once per detection cycle,
+// during the rVFC window when the GPU is already synced — not on the main rAF thread.
+let _captureNeeded = false;
 function _scheduleRVFC() {
   if (!_liveVideoEl) _liveVideoEl = document.getElementById('cameraVideo');
   if (_liveVideoEl && 'requestVideoFrameCallback' in HTMLVideoElement.prototype) {
     _rvfcSupported = true;
-    _liveVideoEl.requestVideoFrameCallback((now, meta) => {
+    _liveVideoEl.requestVideoFrameCallback((_now, meta) => {
       _latestVideoFrame = meta.mediaTime;
-      // Pre-capture pixel strip into detection cache while GPU is already synced
-      // for this video frame. Detection path reads from cache — no drawImage stall
-      // inside the rAF/audio-scheduling critical path.
-      if (appMode === 'live' && staffData && isPlaying) {
+      if (appMode === 'live' && staffData && isPlaying && _captureNeeded) {
         captureLiveStrip(_liveVideoEl, scanX, staffData);
+        _captureNeeded = false;
       }
       _scheduleRVFC();
     });
@@ -415,10 +433,17 @@ function _scheduleRVFC() {
 function animationLoop(now) {
   requestAnimationFrame(animationLoop);
   if (!_pageVisible) return; // tab hidden — skip everything
+
+  // On mobile: cap work to ~30 fps so the CPU runs cooler.
+  // We still re-schedule rAF every frame so the loop stays responsive.
+  const dt = _lastAnimTime > 0 ? Math.min(now - _lastAnimTime, 100) : 16.67;
+  if (FRAME_TARGET_MS > 0 && dt < FRAME_TARGET_MS - 1) return;
+  _lastAnimTime = now;
+
   updateFpsEstimate(now);
   applyPerformanceTuning(now);
   _renderTick++;
-  const shouldRender = (_renderTick & 1) === 0; // canvas at ~30 fps; detection/audio stay at full rate
+  const shouldRender = (_renderTick & 1) === 0; // canvas at ~30 fps (desktop) / ~15 fps (mobile)
 
   if (!staffData || !isPlaying) {
     // Only repaint when it's a render tick — staff is static when paused
@@ -426,8 +451,8 @@ function animationLoop(now) {
     return;
   }
 
-  // Scan line advances at full 60 fps so speed is constant regardless of render rate
-  const curScanX = advanceScanLine();
+  // Scan line advances at a rate normalised to dt so speed is frame-rate-independent
+  const curScanX = advanceScanLine(dt);
 
   // Periodically resume AudioContext if iOS suspended it during inactivity
   if ((now & 4095) < 16) resumeAudioIfSuspended(); // ~every 4 s at 60 fps
@@ -435,29 +460,75 @@ function animationLoop(now) {
   // Detection (throttled)
   if (!_liveVideoEl) _liveVideoEl = document.getElementById('cameraVideo');
   const video = _liveVideoEl;
-  const activeInterval = getDetectionInterval();
-  let runDetection = now - lastDetectionTime > activeInterval;
 
-  if (runDetection) {
-    lastDetectionTime = now;
-    // In live mode, skip detection if the camera hasn't produced a new frame yet.
-    // Uses rVFC timestamp when available (exact); falls back to currentTime.
-    if (appMode === 'live' && video.readyState >= 2) {
-      const vt = _rvfcSupported ? _latestVideoFrame : video.currentTime;
-      if (vt === _lastDetectedVideoTime) {
-        lastDetectionTime = now - activeInterval + 16;
-        runDetection = false; // no new frame — skip detection but still render below
-      } else {
-        _lastDetectedVideoTime = vt;
-        if (!_rvfcSupported) _scheduleRVFC();
+  // ── Photo mode: read from pre-built melody (zero detection cost) ──────────
+  if (appMode === 'photo' && photoDataURL) {
+    const melody = getPhotoMelody();
+    if (melody && melody.length > 0) {
+      // Advance melody index to whichever entry is closest to curScanX
+      while (_photoMelodyIdx < melody.length - 1 && melody[_photoMelodyIdx + 1].x <= curScanX) {
+        _photoMelodyIdx++;
+      }
+      const entry = melody[_photoMelodyIdx];
+      // Only fire notes when the melody entry aligns with the current scan position
+      if (Math.abs(entry.x - curScanX) <= scanSpeed + 1) {
+        lastDetectionResults = entry.results;
+        if (isAudioReady()) {
+          // Only trigger at the start of a detected run; duration = object width in time
+          const strongestConf = {};
+          const strongestDur  = {};
+          for (const result of entry.results) {
+            if (!result.detected || !result.isNoteStart) continue;
+            const noteIdx = result.noteIndex ?? 0;
+            if (strongestConf[noteIdx] === undefined || result.confidence > strongestConf[noteIdx]) {
+              strongestConf[noteIdx] = result.confidence;
+              strongestDur[noteIdx]  = result.durationSecs ?? null;
+            }
+          }
+          const keys = Object.keys(strongestConf);
+          keys.sort((a, b) => strongestConf[b] - strongestConf[a]);
+          const limit = Math.min(keys.length, MAX_NOTES_PER_PASS);
+          for (let ki = 0; ki < limit; ki++) {
+            if (now - lastAnyNoteTime < GLOBAL_NOTE_GAP_MS) break;
+            const noteIdx = +keys[ki];
+            const noteId = `edge_note_${noteIdx}`;
+            if (!shouldTriggerNote(noteId, now, NOTE_COOLDOWN_MS)) continue;
+            playNote(getNoteForPosition(noteIdx), confidenceToVelocity(strongestConf[noteIdx]), strongestDur[noteIdx]);
+            lastAnyNoteTime = now;
+          }
+        }
       }
     }
-  }
 
-  if (runDetection) {
-    const hasSource = (appMode === 'photo' && photoDataURL) || (appMode === 'live' && video.readyState >= 2);
-    if (hasSource) {
-      lastDetectionResults = _detectObjects({
+  // ── Live mode: time-throttled detection ───────────────────────────────────
+  } else if (appMode === 'live') {
+    const activeInterval = getDetectionInterval();
+    let runDetection = now - lastDetectionTime > activeInterval;
+
+    // Pre-arm capture ~50 ms before detection is due so rVFC has time to fire.
+    // rVFC then calls captureLiveStrip (GPU→CPU) in its own callback — not here.
+    if (!_captureNeeded && now - lastDetectionTime > activeInterval - 50) {
+      _captureNeeded = true;
+    }
+
+    if (runDetection) {
+      lastDetectionTime = now;
+      if (video.readyState >= 2) {
+        const vt = _rvfcSupported ? _latestVideoFrame : video.currentTime;
+        if (vt === _lastDetectedVideoTime) {
+          lastDetectionTime = now - activeInterval + 16;
+          runDetection = false;
+        } else {
+          _lastDetectedVideoTime = vt;
+          if (!_rvfcSupported) _scheduleRVFC();
+        }
+      } else {
+        runDetection = false;
+      }
+    }
+
+    if (runDetection) {
+      const freshResults = _detectObjects({
         appMode,
         photoDataURL,
         photoImgEl,
@@ -465,21 +536,21 @@ function animationLoop(now) {
         scanX: curScanX,
         sensitivity,
       });
-
-      // Trigger notes from detection results
-      if (lastDetectionResults && isAudioReady()) {
-        // Keep only strongest detection per pitch lane — plain object avoids Map allocation
+      // null means no fresh cache yet — retain previous results, retry next cycle
+      if (freshResults === null) {
+        lastDetectionTime = now - activeInterval + 16; // push back interval so we retry sooner
+      } else {
+        lastDetectionResults = freshResults;
+      }
+      if (freshResults && isAudioReady()) {
         const strongestConf = {};
-        const strongestIdx  = {};
-        for (const result of lastDetectionResults) {
+        for (const result of freshResults) {
           if (!result.detected) continue;
           const noteIdx = result.noteIndex ?? 0;
           if (strongestConf[noteIdx] === undefined || result.confidence > strongestConf[noteIdx]) {
             strongestConf[noteIdx] = result.confidence;
-            strongestIdx[noteIdx]  = noteIdx;
           }
         }
-        // Sort descending by confidence, cap at MAX_NOTES_PER_PASS
         const keys = Object.keys(strongestConf);
         keys.sort((a, b) => strongestConf[b] - strongestConf[a]);
         const limit = Math.min(keys.length, MAX_NOTES_PER_PASS);
@@ -922,6 +993,10 @@ function wireUI() {
   // Sensitivity slider
   document.getElementById('sensitivitySlider').addEventListener('input', e => {
     sensitivity = parseInt(e.target.value);
+    if (appMode === 'photo' && staffData) {
+      buildPhotoMelody(staffData, sensitivity, scanSpeed);
+      _photoMelodyIdx = 0;
+    }
   });
 
   // Overlay toggles

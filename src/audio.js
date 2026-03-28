@@ -40,7 +40,7 @@ function createMasterBus() {
   // Lower threshold so compressor catches dynamics before makeup gain amplifies them
   const comp = new Tone.Compressor({ threshold: -24, ratio: 5, attack: 0.005, release: 0.1 });
   // Makeup gain boosts overall loudness for outdoor/speaker use
-  const makeupGain = new Tone.Volume(8);
+  const makeupGain = new Tone.Volume(10);
   // Limiter raised to -1 dB — lets signal go louder while still preventing clipping
   const limiter = new Tone.Limiter(-1);
   comp.chain(makeupGain, limiter, Tone.getDestination());
@@ -50,8 +50,8 @@ function createMasterBus() {
 function createAmbientSynth() {
   const synth = new Tone.PolySynth(Tone.Synth, {
     oscillator: { type: 'sine' },
-    envelope: { attack: 0.2, decay: 0.3, sustain: 0.5, release: 2.0 },
-    volume: -12,
+    envelope: { attack: 0.03, decay: 0.3, sustain: 0.5, release: 2.0 },
+    volume: -8,
   });
   synth.maxPolyphony = _poly(2, 4);
   const reverb = _rv(0.75, 0.45, 4000);
@@ -87,7 +87,7 @@ function createKalimbaSynth() {
   const synth = new Tone.PolySynth(Tone.Synth, {
     oscillator: { type: 'triangle8' },
     envelope: { attack: 0.005, decay: 0.5, sustain: 0.05, release: 1.2 },
-    volume: -8,
+    volume: -5,
   });
   synth.maxPolyphony = _poly(2, 4);
   const reverb = _rv(0.55, 0.3, 2500);
@@ -100,7 +100,7 @@ function createFluteSynth() {
   const synth = new Tone.PolySynth(Tone.Synth, {
     oscillator: { type: 'sine' },
     envelope: { attack: 0.12, decay: 0.1, sustain: 0.75, release: 1.2 },
-    volume: -9,
+    volume: -5,
   });
   synth.maxPolyphony = _poly(2, 3);
   const reverb = _rv(0.72, 0.42, 1800);
@@ -132,7 +132,7 @@ function createHarpsichordSynth() {
   const synth = new Tone.PolySynth(Tone.Synth, {
     oscillator: { type: 'sawtooth' },
     envelope: { attack: 0.005, decay: 0.45, sustain: 0.0, release: 0.15 },
-    volume: -10,
+    volume: -6,
   });
   synth.maxPolyphony = _poly(2, 4);
   const reverb = _rv(0.2, 0.1, 7000);
@@ -163,7 +163,7 @@ function createThereminSynth() {
     portamento: 0.12,
     oscillator: { type: 'sine' },
     envelope: { attack: 0.15, decay: 0.05, sustain: 0.9, release: 0.8 },
-    volume: -9,
+    volume: -5,
   });
   synth.maxPolyphony = 2;
   const reverb = _rv(0.5, 0.3, 2200);
@@ -181,8 +181,8 @@ function createPadSynth() {
   // Synth Pad: lush sawtooth + chorus + heavy reverb, spacious ambient
   const synth = new Tone.PolySynth(Tone.Synth, {
     oscillator: { type: 'sawtooth4' },
-    envelope: { attack: 0.4, decay: 0.6, sustain: 0.7, release: 3.5 },
-    volume: -14,
+    envelope: { attack: 0.10, decay: 0.6, sustain: 0.7, release: 3.5 },
+    volume: -8,
   });
   synth.maxPolyphony = _poly(2, 3);
   const reverb = _rv(0.9, 0.65, 1500);
@@ -246,7 +246,7 @@ export function initAudio() {
   Tone.start().then(() => {
     // Reduce scheduling look-ahead on mobile: default 0.1 s adds 100 ms of extra latency.
     // 0.05 s is still safe (2–3 audio buffer lengths) and halves perceived delay.
-    if (isMobile) Tone.getContext().lookAhead = 0.02;
+    if (isMobile) Tone.getContext().lookAhead = 0.002;
     audioReady = true;
     setupInstruments();
   }).catch(err => console.warn('Audio init error:', err));
@@ -255,7 +255,7 @@ export function initAudio() {
 export function tryUnlockAudio() {
   if (!audioReady) {
     Tone.start().then(() => {
-      if (isMobile) Tone.getContext().lookAhead = 0.02;
+      if (isMobile) Tone.getContext().lookAhead = 0.002;
       audioReady = true;
       if (!masterBus) setupInstruments();
     }).catch(() => {});
@@ -263,10 +263,23 @@ export function tryUnlockAudio() {
 }
 
 export function switchInstrument(name) {
-  if (instruments[currentInstrument]) instruments[currentInstrument].releaseAll();
+  const prev = currentInstrument;
+  if (instruments[prev]) instruments[prev].releaseAll();
   currentInstrument = name;
   // Lazy-create the instrument if not yet built (mobile path)
   if (masterBus) ensureInstrument(name);
+
+  // On mobile: dispose the previous instrument's entire Web Audio subgraph after its
+  // release envelope finishes. Without this, every switch leaves a Freeverb chain
+  // (8 comb + 4 allpass filters) running silently → CPU/heat builds up → crackling.
+  // 4 s covers the longest release envelope (pad: 3.5 s).
+  if (isMobile && prev !== name) {
+    const stale = instruments[prev];
+    if (stale) {
+      instruments[prev] = null; // next ensureInstrument() recreates fresh
+      setTimeout(() => { try { stale.dispose(); } catch (_) {} }, 4000);
+    }
+  }
 }
 
 export function setInstrument(name) {
@@ -290,7 +303,13 @@ export function resumeAudioIfSuspended() {
   }
 }
 
-export function playNote(note, velocity = 0.7) {
+/**
+ * @param {string}      note        - Tone.js pitch string, e.g. "C4"
+ * @param {number}      velocity    - 0–1
+ * @param {number|null} durationSecs - if provided, note holds for this many seconds
+ *                                    (object-width derived); otherwise uses instrument default
+ */
+export function playNote(note, velocity = 0.7, durationSecs = null) {
   const synth = instruments[currentInstrument];
   if (!synth || !audioReady) return;
   // iOS can suspend the AudioContext after inactivity; resume and drop this note
@@ -299,7 +318,9 @@ export function playNote(note, velocity = 0.7) {
     Tone.getContext().resume().catch(() => {});
     return;
   }
-  const dur = INSTRUMENT_NOTE_DURATIONS[currentInstrument] || '8n';
+  const dur = durationSecs != null
+    ? Math.max(0.08, durationSecs) + 's'
+    : (INSTRUMENT_NOTE_DURATIONS[currentInstrument] || '8n');
   synth.triggerAttackRelease(note, dur, Tone.now(), Math.min(1.0, velocity));
 }
 
