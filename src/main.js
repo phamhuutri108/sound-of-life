@@ -86,8 +86,8 @@ function applyPhotoBounds() {
     buildPhotoScanCache(photoImgEl, staffData);
     buildPhotoMelody(staffData, sensitivity, scanSpeed); // immediate column-scan melody
     _photoMelodyIdx = 0;
-    hidePhotoLoading(); // melody ready — hide loading overlay
-    // When MediaPipe model is loaded, re-infer once and silently upgrade to higher-quality melody
+    // When MediaPipe model is loaded, re-infer and upgrade to high-quality melody.
+    // Keep loading overlay visible until that completes; fall back to hiding now if model not ready.
     if (isSmartReady() && photoImgEl) {
       const _sd = staffData;
       runInference(photoImgEl, {
@@ -96,8 +96,11 @@ function applyPhotoBounds() {
         onMaskReady: () => {
           buildPhotoMelodyFromMediaPipe(_sd, sensitivity, scanSpeed);
           _photoMelodyIdx = 0;
+          hidePhotoLoading(); // hide only after full MediaPipe melody is ready
         },
       });
+    } else {
+      hidePhotoLoading(); // model not loaded yet — column-scan melody is good enough for now
     }
   }
 }
@@ -481,11 +484,17 @@ function animationLoop(now) {
   // If we used 16.67 (one 60fps frame) as fallback, it would be < FRAME_TARGET_MS(33)
   // forever because _lastAnimTime never gets set past the gate — loop stuck on mobile.
   const dt = _lastAnimTime > 0 ? Math.min(now - _lastAnimTime, 100) : 100;
-  if (FRAME_TARGET_MS > 0 && dt < FRAME_TARGET_MS - 1) return;
+  // Photo mode on mobile: cap at 24fps (42ms) — scan speed is dt-based so music is unaffected.
+  // Live mode stays at 30fps (33ms) for smooth camera preview.
+  const _frameTarget = (_isMobile && appMode === 'photo' && photoDataURL) ? 42 : FRAME_TARGET_MS;
+  if (_frameTarget > 0 && dt < _frameTarget - 1) return;
   _lastAnimTime = now;
 
-  updateFpsEstimate(now);
-  applyPerformanceTuning(now);
+  // FPS tracking + MediaPipe profile tuning are only needed in live mode.
+  if (appMode === 'live') {
+    updateFpsEstimate(now);
+    applyPerformanceTuning(now);
+  }
   _renderTick++;
   // Desktop: render every other rAF tick → 30 fps canvas, 60 fps detection.
   // Mobile: loop already capped at 30 fps, so render every tick to avoid 15 fps choppiness.
@@ -500,8 +509,8 @@ function animationLoop(now) {
   // Scan line advances at a rate normalised to dt so speed is frame-rate-independent
   const curScanX = advanceScanLine(dt);
 
-  // Periodically resume AudioContext if iOS suspended it during inactivity
-  if ((now & 4095) < 16) resumeAudioIfSuspended(); // ~every 4 s at 60 fps
+  // Periodically resume AudioContext if iOS suspended it during inactivity (~every 8s)
+  if ((now & 8191) < 16) resumeAudioIfSuspended();
 
   // Detection (throttled)
   if (!_liveVideoEl) _liveVideoEl = document.getElementById('cameraVideo');

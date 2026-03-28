@@ -8,10 +8,10 @@ const isMobile = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent || '');
 
 // On mobile, reduce reverb wetness and room size to cut CPU load significantly.
 // On very low-end mobile (< 4 cores) skip reverb entirely.
-const mobileReverbScale = (navigator.hardwareConcurrency || 4) < 4 ? 0 : 0.45;
+const mobileReverbScale = (navigator.hardwareConcurrency || 4) < 4 ? 0 : 0.32; // 0.32 = lighter reverb tail
 function _rv(roomSize, wet, dampening) {
   const r = new Tone.Freeverb({
-    roomSize: isMobile ? Math.min(roomSize * 0.55, 0.35) : roomSize,
+    roomSize: isMobile ? Math.min(roomSize * 0.40, 0.22) : roomSize, // smaller room = fewer comb filter ops
     dampening: isMobile ? Math.min(dampening * 1.4, 7000) : dampening,
   });
   r.wet.value = isMobile ? wet * mobileReverbScale : wet;
@@ -176,9 +176,20 @@ function createThereminSynth() {
 }
 
 function createWandererSynth() {
-  // Wind chime: FM synthesis with high harmonicity for bright metallic ring,
-  // very short attack + medium decay + zero sustain = each note strikes like a chime tube.
-  // Heavy spacious reverb lets the overtone tail drift and shimmer in the air.
+  if (isMobile) {
+    // Mobile: PolySynth with sine4 (4 partials via native OscillatorNode — no FM overhead).
+    // Gives bright bell overtones without the carrier+modulator DSP cost of FMSynth.
+    const synth = new Tone.PolySynth(Tone.Synth, {
+      oscillator: { type: 'sine4' },
+      envelope: { attack: 0.001, decay: 0.45, sustain: 0.0, release: 1.5 },
+      volume: -6,
+    });
+    synth.maxPolyphony = 2;
+    const reverb = _rv(0.82, 0.58, 900);
+    synth.chain(reverb, masterBus);
+    return synth;
+  }
+  // Desktop: full FMSynth with high harmonicity for rich metallic ring.
   const synth = new Tone.PolySynth(Tone.FMSynth, {
     harmonicity: 5.1,
     modulationIndex: 10,
@@ -188,7 +199,7 @@ function createWandererSynth() {
     modulationEnvelope: { attack: 0.001, decay: 0.12, sustain: 0.0, release: 0.12 },
     volume: -6,
   });
-  synth.maxPolyphony = _poly(3, 5);
+  synth.maxPolyphony = 5;
   const reverb = _rv(0.88, 0.62, 900);
   synth.chain(reverb, masterBus);
   return synth;
