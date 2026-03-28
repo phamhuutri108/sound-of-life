@@ -96,6 +96,37 @@ export async function startCamera(facing = 'environment') {
   return false;
 }
 
+/**
+ * Try to open the camera with an exact zoom constraint (e.g. 0.5× ultra-wide).
+ * Uses `exact` so the request fails immediately on unsupported devices — caller
+ * can then fall back to CSS scale without an unnecessary camera restart.
+ * Returns true if the stream was switched, false if the device can't satisfy it.
+ */
+export async function tryUltraWideCamera(facing, zoom) {
+  const video = document.getElementById('cameraVideo');
+  if (!navigator.mediaDevices?.getUserMedia) return false;
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: {
+        facingMode: { ideal: facing },
+        zoom: { exact: zoom },
+        width: { ideal: 640 },
+        height: { ideal: 480 },
+        frameRate: { ideal: 24, max: 30 },
+      },
+      audio: false,
+    });
+    if (currentStream) currentStream.getTracks().forEach(t => t.stop());
+    currentStream = stream;
+    video.srcObject = stream;
+    video.style.transform = facing === 'user' ? 'scaleX(-1)' : '';
+    await video.play();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export async function flipCamera({ appMode, photoDataURL, onFacingChange }) {
   cameraFacing = cameraFacing === 'environment' ? 'user' : 'environment';
   document.getElementById('btn-cam-front').classList.toggle('active', cameraFacing === 'user');

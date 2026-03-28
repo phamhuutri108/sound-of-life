@@ -61,7 +61,7 @@ export function calculateStaffPositions(canvasW, canvasH, bounds) {
 }
 
 export function drawStaffLines(sd, c = ctx) {
-  c.strokeStyle = 'rgba(255, 255, 255, 0.55)';
+  c.strokeStyle = 'rgba(255, 255, 255, 0.38)';
   c.lineWidth = 1.5;
   c.setLineDash([]);
   sd.positions.forEach(pos => {
@@ -74,28 +74,27 @@ export function drawStaffLines(sd, c = ctx) {
     if (pos.isLedger) {
       const cx  = sd.displayWidth / 2;
       const hw  = sd.spacing * 2;
-      c.strokeStyle = 'rgba(255,255,255,0.3)';
+      c.strokeStyle = 'rgba(255,255,255,0.21)';
       c.setLineDash([4, 3]);
       c.beginPath();
       c.moveTo(cx - hw, pos.y);
       c.lineTo(cx + hw, pos.y);
       c.stroke();
       c.setLineDash([]);
-      c.strokeStyle = 'rgba(255, 255, 255, 0.55)';
+      c.strokeStyle = 'rgba(255, 255, 255, 0.38)';
     }
   });
 }
 
 export function drawTrebleClef(sd, c = ctx) {
-  // Cap font size: treble clef must fit within the left margin (staffLeft from canvas edge)
-  // textAlign=center means half the char width extends left of clefX
-  // Empirically the 𝄞 glyph is ~0.4× font-size wide, so maxSize = staffLeft / 0.5 * 0.8
-  const maxByMargin = sd.staffLeft * 1.4;
-  const maxByHeight = (sd.staffBottom - sd.staffTop) * 0.65;
-  const clefSize = Math.min(maxByMargin, maxByHeight, 160);
-  const clefX = sd.staffLeft - clefSize * 0.18;
+  // Allow clef to use more of the left margin; 2.0× gives ~40% larger glyph on phones.
+  // X offset reduced (0.12 vs 0.18) so the larger glyph doesn't clip the canvas edge.
+  const maxByMargin = sd.staffLeft * 2.0;
+  const maxByHeight = (sd.staffBottom - sd.staffTop) * 0.9;
+  const clefSize = Math.min(maxByMargin, maxByHeight, 220);
+  const clefX = sd.staffLeft - clefSize * 0.12;
   const clefY = (sd.staffTop + sd.staffBottom) / 2;
-  c.fillStyle = 'rgba(255, 255, 255, 0.78)';
+  c.fillStyle = 'rgba(255, 255, 255, 0.55)';
   c.font = `${clefSize}px serif`;
   c.textAlign = 'center';
   c.textBaseline = 'middle';

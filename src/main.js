@@ -12,6 +12,7 @@ import {
   startCamera, flipCamera as _flipCamera, setCameraFacing as _setCameraFacing,
   capturePhoto as _capturePhoto, retakePhoto, importPhoto as _importPhoto,
   cameraFacing as _cameraFacing, currentStream,
+  tryUltraWideCamera,
 } from './camera.js';
 import {
   ctx, canvas as staffCanvas,
@@ -79,7 +80,7 @@ function applyPhotoBounds() {
    SCAN LINE STATE
 ═══════════════════════════════════════════════════════════════ */
 let scanX = 0;
-let scanSpeed = 1.6; // px/frame at 60fps
+let scanSpeed = 0.8; // px/frame at 60fps
 
 function setScanSpeed(val) {
   scanSpeed = parseFloat(val) * 0.8 + 0.5;
@@ -508,6 +509,9 @@ let zoomMax = ZOOM_MAX_DEFAULT;
 let zoomTrack  = null; // MediaStreamTrack with zoom capability
 let zoomHwMin  = 1;
 let zoomHwMax  = ZOOM_MAX_DEFAULT;
+// When camera is restarted to achieve a specific zoom (e.g. ultra-wide),
+// store the requested level here so initCameraZoom restores it instead of resetting to 1×.
+let _pendingZoom = null;
 
 
 function initCameraZoom() {
@@ -525,26 +529,50 @@ function initCameraZoom() {
   } else {
     zoomMax = ZOOM_MAX_DEFAULT;
   }
-  // Reset to 1× on new camera
-  currentZoom = 1;
-  document.getElementById('zoomContainer').style.transform = '';
+
+  if (_pendingZoom !== null) {
+    // Stream was replaced by tryUltraWideCamera — ultra-wide confirmed.
+    currentZoom = _pendingZoom;
+    _pendingZoom = null;
+    document.getElementById('zoomContainer').style.transform = '';
+    if (zoomTrack && currentZoom >= zoomHwMin && currentZoom <= zoomHwMax) {
+      zoomTrack.applyConstraints({ advanced: [{ zoom: currentZoom }] }).catch(() => {});
+    }
+    // else: OS already selected the right lens via the zoom constraint — no CSS scale.
+  } else {
+    // Normal camera start — reset to 1×
+    currentZoom = 1;
+    document.getElementById('zoomContainer').style.transform = '';
+  }
   updateZoomPill();
 }
 
 function applyZoom(z) {
   currentZoom = Math.min(zoomMax, Math.max(ZOOM_MIN, z));
 
-  if (zoomTrack) {
-    const hwZ = Math.min(zoomHwMax, Math.max(zoomHwMin, currentZoom));
+  if (zoomTrack && currentZoom >= zoomHwMin) {
+    // Within hardware zoom range — apply directly
+    const hwZ = Math.min(zoomHwMax, currentZoom);
     zoomTrack.applyConstraints({ advanced: [{ zoom: hwZ }] }).catch(() => {
       _applyCSSZoom(currentZoom);
     });
-    // Below hardware min (e.g. 0.5× on camera that starts at 1×) → CSS scale
-    if (currentZoom < zoomHwMin) {
-      _applyCSSZoom(currentZoom);
-    } else {
-      document.getElementById('zoomContainer').style.transform = '';
-    }
+    document.getElementById('zoomContainer').style.transform = '';
+  } else if (currentZoom < 1) {
+    // Sub-1×: try to switch to the ultra-wide lens via an exact zoom constraint.
+    // `exact` fails fast on devices that don't support it → CSS scale fallback.
+    // On success → loadedmetadata → initCameraZoom restores currentZoom (no CSS scale).
+    _pendingZoom = currentZoom;
+    tryUltraWideCamera(_cameraFacing, currentZoom).then(gotUltraWide => {
+      if (!gotUltraWide) {
+        _pendingZoom = null;
+        _applyCSSZoom(currentZoom);
+        updateZoomPill();
+        bumpZoomPillVisible();
+      }
+    });
+    updateZoomPill();
+    bumpZoomPillVisible();
+    return;
   } else {
     _applyCSSZoom(currentZoom);
   }
