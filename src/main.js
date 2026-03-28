@@ -86,6 +86,7 @@ function applyPhotoBounds() {
     buildPhotoScanCache(photoImgEl, staffData);
     buildPhotoMelody(staffData, sensitivity, scanSpeed); // immediate column-scan melody
     _photoMelodyIdx = 0;
+    _lastFiredMelodyIdx = -1;
     // Show audio immediately from column-scan; hide loading now.
     // MediaPipe runs in background and silently upgrades the melody when done.
     hidePhotoLoading();
@@ -120,6 +121,7 @@ function hidePhotoLoading() {
 ═══════════════════════════════════════════════════════════════ */
 let scanX = 0;
 let _photoMelodyIdx = 0; // current position within pre-built photo melody array
+let _lastFiredMelodyIdx = -1; // guard: only fire notes once per entry
 // Speed formula: (val * 0.8 + 0.5) * 0.7 — 30% slower than original across all levels
 // val=1 (default/slowest) → 0.91 px/frame; val=5 (fastest) → 3.15 px/frame
 let scanSpeed = 0.91; // matches slider default value=1
@@ -136,7 +138,8 @@ function advanceScanLine(dt) {
   if (scanX > staffData.staffRight) {
     scanX = staffData.staffLeft;
     _photoMelodyIdx = 0;
-    lastDetectionResults = null; // clear stale dots on wrap
+    _lastFiredMelodyIdx = -1; // reset on wrap so first entry fires again next loop
+    lastDetectionResults = null;
     Object.keys(noteCooldowns).forEach(k => delete noteCooldowns[k]);
   }
   return scanX;
@@ -531,8 +534,9 @@ function animationLoop(now) {
       // Visual: only show dots for note-start positions (count matches notes played).
       // Audio logic below uses entry.results directly — this line is display-only.
       lastDetectionResults = entry.results.filter(r => r.isNoteStart);
-      // Fire notes only at the start of each detected run
-      if (Math.abs(entry.x - curScanX) <= scanSpeed + 1 && isAudioReady()) {
+      // Fire notes only once per melody entry (guard against multi-frame re-fires on same position)
+      if (_photoMelodyIdx !== _lastFiredMelodyIdx && Math.abs(entry.x - curScanX) <= scanSpeed + 1 && isAudioReady()) {
+        _lastFiredMelodyIdx = _photoMelodyIdx;
         const strongestConf = {};
         const strongestDur  = {};
         for (const result of entry.results) {
