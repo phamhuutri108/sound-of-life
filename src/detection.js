@@ -231,7 +231,7 @@ function _applyGhostNotes(melody, secPerStep) {
   const M = melody[0].results.length;
   const W = _photoCacheW;
   const H = PHOTO_SCAN_H;
-  const MIN_GAP = 8;
+  const MIN_GAP = 4;
   const _r = s => { const x = Math.sin(s * 9301 + 49297) * 233280; return x - Math.floor(x); };
   const _bright = ci => {
     const frac = Math.max(0, Math.min(1, melody[ci].x / (_photoCacheDispW || W)));
@@ -245,19 +245,24 @@ function _applyGhostNotes(melody, secPerStep) {
   };
   let prevNi = -1;
   const _place = (ci, seed) => {
-    if (ci < 0 || ci >= N) return;
+    if (ci < 0 || ci >= N) return false;
     const bright = _bright(ci);
     const dir   = _r(seed + 3) > 0.5 ? 1 : -1;
     const steps = Math.round(_r(seed + 4) * 2);
     let ni = Math.round((bright / 255) * (M - 1)) + dir * steps;
     ni = Math.max(0, Math.min(M - 1, ni));
     if (ni === prevNi) ni = Math.max(0, Math.min(M - 1, ni + dir));
+    // Don't place on top of an already-detected row (real or prior ghost)
+    if (melody[ci].results[ni].detected) return false;
     prevNi = ni;
+    // Duration varies naturally: 2–4 steps, shorter ghosts feel more incidental
+    const dur = secPerStep * (2 + _r(seed + 6) * 2);
     melody[ci].results[ni].detected     = true;
     melody[ci].results[ni].isNoteStart  = true;
-    melody[ci].results[ni].durationSecs = secPerStep * 3;
+    melody[ci].results[ni].durationSecs = dur;
     melody[ci].results[ni].confidence   = 0.0; // minimum velocity — subtle
     melody[ci].results[ni].isGhost      = true;
+    return true;
   };
   let gapStart = -1;
   for (let i = 0; i <= N; i++) {
@@ -266,14 +271,31 @@ function _applyGhostNotes(melody, secPerStep) {
     if ((!isEmpty || i === N) && gapStart !== -1) {
       const gapLen = i - gapStart;
       const seed   = gapStart * 13;
-      if (gapLen >= MIN_GAP) {
-        if (_r(seed) < 0.75) {
+      // Small gaps (4–7): single quiet ghost, 65% chance
+      if (gapLen >= MIN_GAP && gapLen < MIN_GAP * 2) {
+        if (_r(seed) < 0.65) {
+          const t1 = 0.25 + _r(seed + 1) * 0.5;
+          _place(Math.floor(gapStart + gapLen * t1), seed + 10);
+        }
+      // Medium gaps (8–15): 1–2 ghosts, 85% chance
+      } else if (gapLen >= MIN_GAP * 2 && gapLen < MIN_GAP * 3) {
+        if (_r(seed) < 0.85) {
           const t1 = 0.2 + _r(seed + 1) * 0.6;
           _place(Math.floor(gapStart + gapLen * t1), seed + 10);
-          if (gapLen >= MIN_GAP * 2 && _r(seed + 2) < 0.6) {
-            const half = t1 < 0.5 ? 0.5 + _r(seed + 5) * 0.35 : 0.15 + _r(seed + 5) * 0.35;
+          if (_r(seed + 2) < 0.55) {
+            const half = t1 < 0.5 ? 0.55 + _r(seed + 5) * 0.3 : 0.15 + _r(seed + 5) * 0.3;
             _place(Math.floor(gapStart + gapLen * half), seed + 20);
           }
+        }
+      // Long gaps (16+): up to 3 ghosts, 90% chance
+      } else if (gapLen >= MIN_GAP * 3) {
+        if (_r(seed) < 0.90) {
+          const t1 = 0.15 + _r(seed + 1) * 0.25;
+          const t2 = 0.45 + _r(seed + 2) * 0.20;
+          const t3 = 0.72 + _r(seed + 7) * 0.18;
+          _place(Math.floor(gapStart + gapLen * t1), seed + 10);
+          if (_r(seed + 3) < 0.75) _place(Math.floor(gapStart + gapLen * t2), seed + 20);
+          if (_r(seed + 4) < 0.50) _place(Math.floor(gapStart + gapLen * t3), seed + 30);
         }
       }
       gapStart = -1;
