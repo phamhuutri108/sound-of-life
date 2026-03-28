@@ -79,12 +79,14 @@ button, .toolbar-btn, .segment-btn, .top-btn {
   backdrop-filter: blur(6px);
   -webkit-backdrop-filter: blur(6px);
   z-index: 30;
-  pointer-events: none;
-  transition: opacity 0.35s ease;
+  pointer-events: all;
+  opacity: 1;
+  transition: opacity 0.3s ease;
 }
 .photo-loading.hidden {
   opacity: 0;
   pointer-events: none;
+  display: none;
 }
 .photo-loading-ring {
   width: 52px;

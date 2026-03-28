@@ -86,8 +86,9 @@ function applyPhotoBounds() {
     buildPhotoScanCache(photoImgEl, staffData);
     buildPhotoMelody(staffData, sensitivity, scanSpeed); // immediate column-scan melody
     _photoMelodyIdx = 0;
-    // When MediaPipe model is loaded, re-infer and upgrade to high-quality melody.
-    // Keep loading overlay visible until that completes; fall back to hiding now if model not ready.
+    // Show audio immediately from column-scan; hide loading now.
+    // MediaPipe runs in background and silently upgrades the melody when done.
+    hidePhotoLoading();
     if (isSmartReady() && photoImgEl) {
       const _sd = staffData;
       runInference(photoImgEl, {
@@ -96,11 +97,8 @@ function applyPhotoBounds() {
         onMaskReady: () => {
           buildPhotoMelodyFromMediaPipe(_sd, sensitivity, scanSpeed);
           _photoMelodyIdx = 0;
-          hidePhotoLoading(); // hide only after full MediaPipe melody is ready
         },
       });
-    } else {
-      hidePhotoLoading(); // model not loaded yet — column-scan melody is good enough for now
     }
   }
 }
