@@ -443,7 +443,9 @@ function animationLoop(now) {
   updateFpsEstimate(now);
   applyPerformanceTuning(now);
   _renderTick++;
-  const shouldRender = (_renderTick & 1) === 0; // canvas at ~30 fps (desktop) / ~15 fps (mobile)
+  // Desktop: render every other rAF tick → 30 fps canvas, 60 fps detection.
+  // Mobile: loop already capped at 30 fps, so render every tick to avoid 15 fps choppiness.
+  const shouldRender = _isMobile || (_renderTick & 1) === 0;
 
   if (!staffData || !isPlaying) {
     // Only repaint when it's a render tick — staff is static when paused

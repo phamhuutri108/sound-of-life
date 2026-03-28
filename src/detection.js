@@ -212,42 +212,76 @@ export function buildPhotoMelody(staffData, sensitivity, scanSpeed) {
     }
   }
 
-  // Pass 3: ghost note fill.
-  // Columns with zero real detected notes get a subtle ghost note derived from
-  // column brightness: dark column → low pitch, bright column → high pitch.
-  // Ghost notes fire every GHOST_EVERY empty columns so they don't cluster.
-  // They fill melodic gaps so even sparse/uniform images produce flowing music.
+  // Pass 3: ghost note fill — organic, image-derived, non-metronomic.
+  //
+  // Strategy: walk gap-by-gap; each gap decides independently (via seeded random)
+  // whether to place a ghost note, where exactly, and at what pitch.
+  // The pitch is brightness-derived but nudged so consecutive ghosts step melodically.
+  // Some gaps are left silent on purpose — rests are part of the music.
   const W = _photoCacheW;
   const H = PHOTO_SCAN_H;
-  const GHOST_EVERY = 4; // one ghost note per 4 empty columns
-  const GHOST_DURATION = secPerStep * 3; // 3× step width — enough for sustained instruments
-  let emptyStreak = 0;
-  for (let i = 0; i < N; i++) {
-    const hasRealNote = melody[i].results.some(r => r.isNoteStart);
-    if (hasRealNote) { emptyStreak = 0; continue; }
-    emptyStreak++;
-    if (emptyStreak % GHOST_EVERY !== 0) continue;
+  const MIN_GAP = 8; // gaps shorter than this stay silent
 
-    // Compute average brightness for this column from the photo cache
-    const frac = Math.max(0, Math.min(1, melody[i].x / (_photoCacheDispW || W)));
-    const cx   = Math.round(frac * (W - 1));
-    const x0   = Math.max(0, cx - 2), x1 = Math.min(W - 1, cx + 2);
-    let brightSum = 0, brightCnt = 0;
-    for (let y = 0; y < H; y++) {
-      for (let x = x0; x <= x1; x++) {
-        brightSum += _photoCache[y * W + x];
-        brightCnt++;
+  // Deterministic pseudo-random seeded by column index (same photo → same melody).
+  const _r = s => { const x = Math.sin(s * 9301 + 49297) * 233280; return x - Math.floor(x); };
+
+  // Average brightness from the middle vertical band of a column (ignores sky/ground)
+  const _bright = ci => {
+    const frac = Math.max(0, Math.min(1, melody[ci].x / (_photoCacheDispW || W)));
+    const cx = Math.round(frac * (W - 1));
+    const x0 = Math.max(0, cx - 2), x1 = Math.min(W - 1, cx + 2);
+    const y0 = Math.floor(H * 0.25), y1 = Math.floor(H * 0.75);
+    let s = 0, c = 0;
+    for (let y = y0; y < y1; y++)
+      for (let x = x0; x <= x1; x++) { s += _photoCache[y * W + x]; c++; }
+    return c ? s / c : 128;
+  };
+
+  let prevNi = -1; // track last ghost pitch for melodic stepping
+
+  const _place = (ci, seed) => {
+    const bright = _bright(ci);
+    // Base pitch from brightness; nudge up/down by 0-2 so melody moves naturally
+    const dir   = _r(seed + 3) > 0.5 ? 1 : -1;
+    const steps = Math.round(_r(seed + 4) * 2); // 0, 1, or 2
+    let ni = Math.round((bright / 255) * (M - 1)) + dir * steps;
+    ni = Math.max(0, Math.min(M - 1, ni));
+    // Avoid repeating the same pitch as the previous ghost
+    if (ni === prevNi) ni = Math.max(0, Math.min(M - 1, ni + dir));
+    prevNi = ni;
+    melody[ci].results[ni].detected     = true;
+    melody[ci].results[ni].isNoteStart  = true;
+    melody[ci].results[ni].durationSecs = secPerStep * 3;
+    melody[ci].results[ni].confidence   = 0.0; // minimum velocity — subtle
+    melody[ci].results[ni].isGhost      = true;
+  };
+
+  // Walk gaps; each gap makes its own independent decision
+  let gapStart = -1;
+  for (let i = 0; i <= N; i++) {
+    const isEmpty = i < N && !melody[i].results.some(r => r.isNoteStart);
+    if (isEmpty && gapStart === -1) { gapStart = i; continue; }
+    if ((!isEmpty || i === N) && gapStart !== -1) {
+      const gapLen = i - gapStart;
+      const seed   = gapStart * 13; // unique seed per gap
+
+      if (gapLen >= MIN_GAP) {
+        // 75% chance this gap gets any ghost at all — natural silence preserved
+        if (_r(seed) < 0.75) {
+          // Where in the gap? Random position skewed away from edges
+          const t1 = 0.2 + _r(seed + 1) * 0.6; // 20%–80% into gap
+          _place(Math.floor(gapStart + gapLen * t1), seed + 10);
+
+          // Long gaps (≥ 2× MIN_GAP) may get a second note — 60% chance
+          if (gapLen >= MIN_GAP * 2 && _r(seed + 2) < 0.6) {
+            // Second note in the other half of the gap, not too close to first
+            const half = t1 < 0.5 ? 0.5 + _r(seed + 5) * 0.35 : 0.15 + _r(seed + 5) * 0.35;
+            _place(Math.floor(gapStart + gapLen * half), seed + 20);
+          }
+        }
       }
+      gapStart = -1;
     }
-    const avgBright = brightCnt > 0 ? brightSum / brightCnt : 128;
-
-    // Map brightness → note index: dark (0) = low note (0), bright (255) = high note (M-1)
-    const ni = Math.round((avgBright / 255) * (M - 1));
-    melody[i].results[ni].detected    = true;
-    melody[i].results[ni].isNoteStart = true;
-    melody[i].results[ni].durationSecs = GHOST_DURATION;
-    melody[i].results[ni].confidence  = 0.0; // minimum velocity (~0.42) — subtle
-    melody[i].results[ni].isGhost     = true;
   }
 
   _photoMelody = melody;
