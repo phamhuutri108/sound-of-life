@@ -150,15 +150,25 @@ export function buildPhotoScanCache(source, staffData) {
   _photoCacheW    = W;
   _photoCacheDispW = dispW;
 
-  let sum = 0, sumSq = 0, satSum = 0;
-  for (let i = 0; i < N; i++) {
-    const v = _photoCache[i];
-    sum += v; sumSq += v * v;
-    satSum += _photoSatCache[i];
+  // Compute statistics ONLY over the photo content area (excludes black letterbox).
+  // In portrait orientation the letterbox can cover 70%+ of the canvas — computing
+  // bgBright over all pixels drags it down to ~63 vs ~133, crippling darkScore and
+  // producing far fewer notes than landscape. Clamp to the actual image rect.
+  const cx0 = Math.round(dx), cx1 = Math.min(W - 1, Math.round(dx + drawW));
+  const cy0 = Math.round(dy), cy1 = Math.min(H - 1, Math.round(dy + drawH));
+  let sum = 0, sumSq = 0, satSum = 0, cnt = 0;
+  for (let y = cy0; y <= cy1; y++) {
+    for (let x = cx0; x <= cx1; x++) {
+      const v = _photoCache[y * W + x];
+      sum += v; sumSq += v * v;
+      satSum += _photoSatCache[y * W + x];
+      cnt++;
+    }
   }
-  const mean = sum / N;
-  _photoBgBright = Math.max(mean, mean + 0.84 * Math.sqrt(Math.max(0, sumSq / N - mean * mean)));
-  _photoAvgSat   = satSum / N;
+  const n = Math.max(1, cnt);
+  const mean = sum / n;
+  _photoBgBright = Math.max(mean, mean + 0.84 * Math.sqrt(Math.max(0, sumSq / n - mean * mean)));
+  _photoAvgSat   = satSum / n;
 }
 
 export function clearPhotoScanCache() {
