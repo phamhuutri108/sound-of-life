@@ -250,11 +250,14 @@ function capturePhoto() {
     photoDataURL = result.photoDataURL;
     photoImgEl = result.photoImgEl;
     document.getElementById('saveBtn').style.display = '';
-    if (photoImgEl.complete && photoImgEl.naturalWidth) {
-      applyPhotoBounds();
-    } else {
-      photoImgEl.onload = applyPhotoBounds;
-    }
+    // Defer by one rAF so the browser paints the loading overlay before heavy work starts
+    requestAnimationFrame(() => {
+      if (photoImgEl.complete && photoImgEl.naturalWidth) {
+        applyPhotoBounds();
+      } else {
+        photoImgEl.onload = applyPhotoBounds;
+      }
+    });
   } else {
     hidePhotoLoading();
   }
@@ -335,11 +338,13 @@ function onImportPhoto() {
       photoDataURL = result.photoDataURL;
       photoImgEl = result.photoImgEl;
       document.getElementById('saveBtn').style.display = '';
-      if (photoImgEl.complete && photoImgEl.naturalWidth) {
-        applyPhotoBounds();
-      } else {
-        photoImgEl.onload = applyPhotoBounds;
-      }
+      requestAnimationFrame(() => {
+        if (photoImgEl.complete && photoImgEl.naturalWidth) {
+          applyPhotoBounds();
+        } else {
+          photoImgEl.onload = applyPhotoBounds;
+        }
+      });
     },
   });
 }
