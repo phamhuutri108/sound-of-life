@@ -1,6 +1,9 @@
-// Detection: column-scan multi-signal detector
-// Three signals combined: darkness, local edge contrast, and color saturation.
-// All signals are relative to the column's own statistics — self-adapting per scene.
+// Detection: MediaPipe segmentation (primary) + column-scan multi-signal fallback
+// MediaPipe provides high-quality object segmentation when the model is ready.
+// Falls back to the column-scan detector (darkness + edge contrast + saturation)
+// while the model is loading or if it fails.
+
+import { isSmartReady, runInference, getEdgeTransitions } from './smartDetection.js';
 
 export let cvReady = false;
 export function loadOpenCVIfNeeded() {} // no-op — OpenCV no longer loaded
@@ -380,8 +383,38 @@ function detectAtScanLine(source, staffData, scanX, sensitivity) {
 /* ── Main export ── */
 let _videoEl = null;
 
+/** Map a display-space Y → note index (0 = lowest, 12 = highest) */
+function yToNoteIndex(y, staffData) {
+  const { staffTop, staffBottom } = staffData;
+  const clampedY = Math.max(staffTop, Math.min(staffBottom, y));
+  const ratio = 1 - ((clampedY - staffTop) / (staffBottom - staffTop));
+  return Math.round(ratio * 12);
+}
+
 export function detectObjects({ appMode, photoImgEl, staffData, scanX, sensitivity }) {
   if (!staffData) return null;
+
+  // ── Primary path: MediaPipe segmentation ──
+  // Runs once per photo (photoMaskCached) or throttled per video frame.
+  if (isSmartReady()) {
+    const video = document.getElementById('cameraVideo');
+    const source = (appMode === 'photo' && photoImgEl) ? photoImgEl : video;
+    if (source) {
+      runInference(source, { appMode, staffData, sensitivity, scanX }); // fire-and-forget
+    }
+    const transitions = getEdgeTransitions(staffData, scanX, sensitivity);
+    if (transitions) {
+      return transitions.map(t => ({
+        detected: true,
+        confidence: t.confidence,
+        y: t.y,
+        noteIndex: yToNoteIndex(t.y, staffData),
+      }));
+    }
+    // Mask not ready yet — fall through to column-scan for this cycle
+  }
+
+  // ── Fallback: column-scan multi-signal detector ──
   const source = (appMode === 'photo' && photoImgEl)
     ? photoImgEl
     : (_videoEl || (_videoEl = document.getElementById('cameraVideo')));
