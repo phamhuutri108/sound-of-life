@@ -632,13 +632,14 @@ function animationLoop(now) {
         }
         const keys = Object.keys(strongestConf);
         keys.sort((a, b) => strongestConf[b] - strongestConf[a]);
-        const limit = Math.min(keys.length, MAX_NOTES_PER_PASS);
-        for (let ki = 0; ki < limit; ki++) {
-          if (now - lastAnyNoteTime < GLOBAL_NOTE_GAP_MS) break;
-          const noteIdx = +keys[ki];
-          const noteId = `edge_note_${noteIdx}`;
-          if (!shouldTriggerNote(noteId, now, NOTE_COOLDOWN_MS)) continue;
-          playNote(getNoteForPosition(noteIdx), confidenceToVelocity(strongestConf[noteIdx]));
+        if (now - lastAnyNoteTime >= GLOBAL_NOTE_GAP_MS) {
+          const limit = Math.min(keys.length, MAX_NOTES_PER_PASS);
+          for (let ki = 0; ki < limit; ki++) {
+            const noteIdx = +keys[ki];
+            const noteId = `edge_note_${noteIdx}`;
+            if (!shouldTriggerNote(noteId, now, NOTE_COOLDOWN_MS)) continue;
+            playNote(getNoteForPosition(noteIdx), confidenceToVelocity(strongestConf[noteIdx]));
+          }
           lastAnyNoteTime = now;
         }
       }

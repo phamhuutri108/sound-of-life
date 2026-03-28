@@ -24,6 +24,15 @@ const INSTRUMENT_NOTE_DURATIONS = {
   theremin: '4n',  // long sustain notes slide into each other
   pad:      '2n',  // needs time for attack (0.4 s) to bloom
 };
+
+// Minimum note duration per instrument — must be ≥ attack time so the note
+// is audible before the envelope releases. Short runs on slow-attack instruments
+// were previously silent because Math.max(0.08, dur) < attack time.
+const INSTRUMENT_MIN_DURATION = {
+  pad:      0.18,  // attack 0.10 — give a bit of sustain headroom
+  theremin: 0.25,  // attack 0.15
+  ambient:  0.22,  // attack 0.12
+};
 export let currentInstrument = 'wanderer';
 export let currentScale = 'major';
 
@@ -348,8 +357,9 @@ export function playNote(note, velocity = 0.7, durationSecs = null) {
     Tone.getContext().resume().catch(() => {});
     return;
   }
+  const minDur = INSTRUMENT_MIN_DURATION[currentInstrument] ?? 0.08;
   const dur = durationSecs != null
-    ? Math.max(0.08, durationSecs) + 's'
+    ? Math.max(minDur, durationSecs) + 's'
     : (INSTRUMENT_NOTE_DURATIONS[currentInstrument] || '8n');
   synth.triggerAttackRelease(note, dur, Tone.now(), Math.min(1.0, velocity));
 }
