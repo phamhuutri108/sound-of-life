@@ -65,6 +65,46 @@ button, .toolbar-btn, .segment-btn, .top-btn {
 }
 
 /* ═══════════════════════════════════════
+   PHOTO LOADING OVERLAY
+═══════════════════════════════════════ */
+.photo-loading {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  background: rgba(10, 18, 8, 0.72);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  z-index: 30;
+  pointer-events: none;
+  transition: opacity 0.35s ease;
+}
+.photo-loading.hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+.photo-loading-ring {
+  width: 52px;
+  height: 52px;
+  border: 3px solid rgba(120, 176, 74, 0.18);
+  border-top-color: var(--accent-gold-bright);
+  border-radius: 50%;
+  animation: photo-spin 0.9s linear infinite;
+}
+@keyframes photo-spin {
+  to { transform: rotate(360deg); }
+}
+.photo-loading-text {
+  font-family: var(--font-display);
+  font-size: 0.95rem;
+  color: var(--text-secondary);
+  letter-spacing: 0.06em;
+}
+
+/* ═══════════════════════════════════════
    SPLASH SCREEN
 ═══════════════════════════════════════ */
 .splash {

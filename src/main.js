@@ -86,6 +86,7 @@ function applyPhotoBounds() {
     buildPhotoScanCache(photoImgEl, staffData);
     buildPhotoMelody(staffData, sensitivity, scanSpeed); // immediate column-scan melody
     _photoMelodyIdx = 0;
+    hidePhotoLoading(); // melody ready — hide loading overlay
     // When MediaPipe model is loaded, re-infer once and silently upgrade to higher-quality melody
     if (isSmartReady() && photoImgEl) {
       const _sd = staffData;
@@ -99,6 +100,18 @@ function applyPhotoBounds() {
       });
     }
   }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   PHOTO LOADING OVERLAY
+═══════════════════════════════════════════════════════════════ */
+function showPhotoLoading() {
+  const el = document.getElementById('photoLoading');
+  if (el) el.classList.remove('hidden');
+}
+function hidePhotoLoading() {
+  const el = document.getElementById('photoLoading');
+  if (el) el.classList.add('hidden');
 }
 
 /* ═══════════════════════════════════════════════════════════════
@@ -230,18 +243,19 @@ async function selectMode(mode) {
    PHOTO CAPTURE
 ═══════════════════════════════════════════════════════════════ */
 function capturePhoto() {
+  showPhotoLoading();
   const result = _capturePhoto({ staffData, noteCooldowns, t });
   if (result) {
     photoDataURL = result.photoDataURL;
     photoImgEl = result.photoImgEl;
-    // Show save button
     document.getElementById('saveBtn').style.display = '';
-    // Wait for image to decode before computing bounds (may already be complete for data URLs)
     if (photoImgEl.complete && photoImgEl.naturalWidth) {
       applyPhotoBounds();
     } else {
       photoImgEl.onload = applyPhotoBounds;
     }
+  } else {
+    hidePhotoLoading();
   }
 }
 
@@ -298,6 +312,7 @@ function _revokeBlobPhoto() {
 
 function doRetakePhoto() {
   releaseAllInstruments(); // stop music immediately when exiting photo
+  hidePhotoLoading();
   _revokeBlobPhoto();
   retakePhoto();
   photoDataURL = null;
@@ -315,6 +330,7 @@ function onImportPhoto() {
     noteCooldowns,
     t,
     onResult: (result) => {
+      showPhotoLoading();
       photoDataURL = result.photoDataURL;
       photoImgEl = result.photoImgEl;
       document.getElementById('saveBtn').style.display = '';
