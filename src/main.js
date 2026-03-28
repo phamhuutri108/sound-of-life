@@ -533,7 +533,11 @@ function animationLoop(now) {
       const entry = melody[_photoMelodyIdx];
       // Visual: only show dots for note-start positions (count matches notes played).
       // Audio logic below uses entry.results directly — this line is display-only.
-      lastDetectionResults = entry.results.filter(r => r.isNoteStart);
+      // Visual: show only the top MAX_NOTES_PER_PASS notes (by confidence) so
+      // the display matches what actually plays — avoids visual chord-explosion.
+      const _ns = entry.results.filter(r => r.isNoteStart);
+      _ns.sort((a, b) => (b.confidence ?? 0) - (a.confidence ?? 0));
+      lastDetectionResults = _ns.slice(0, MAX_NOTES_PER_PASS);
       // Fire notes only once per melody entry (guard against multi-frame re-fires on same position)
       if (_photoMelodyIdx !== _lastFiredMelodyIdx && Math.abs(entry.x - curScanX) <= scanSpeed + 1 && isAudioReady()) {
         _lastFiredMelodyIdx = _photoMelodyIdx;
