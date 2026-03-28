@@ -301,6 +301,38 @@ function _applyGhostNotes(melody, secPerStep) {
       gapStart = -1;
     }
   }
+
+  // ── Pass 2: bridge wide pitch leaps between adjacent real notes ────────────
+  // When two consecutive real isNoteStart events jump ≥4 pitch positions and
+  // are close enough in time, add a quiet passing-tone ghost at the midpoint.
+  // This fills the "empty space" between two real notes without sounding added.
+  const realStarts = [];
+  for (let i = 0; i < N; i++) {
+    for (let ni = 0; ni < M; ni++) {
+      const r = melody[i].results[ni];
+      if (r.isNoteStart && !r.isGhost) realStarts.push({ ci: i, ni });
+    }
+  }
+  realStarts.sort((a, b) => a.ci - b.ci || a.ni - b.ni);
+  for (let k = 0; k < realStarts.length - 1; k++) {
+    const a = realStarts[k], b = realStarts[k + 1];
+    const pitchGap = Math.abs(a.ni - b.ni);
+    const timeGap  = b.ci - a.ci;
+    // Only bridge when pitch jumps wide AND time gap is short-to-medium
+    if (pitchGap < 4 || timeGap < 2 || timeGap > MIN_GAP * 5) continue;
+    const midCi = Math.round((a.ci + b.ci) / 2);
+    const midNi = Math.round((a.ni + b.ni) / 2);
+    if (midCi < 0 || midCi >= N) continue;
+    if (melody[midCi].results[midNi].detected) continue; // don't overwrite
+    const seed = (a.ci * 17 + b.ci * 7) | 0;
+    if (_r(seed + 9) < 0.70) {
+      melody[midCi].results[midNi].detected     = true;
+      melody[midCi].results[midNi].isNoteStart  = true;
+      melody[midCi].results[midNi].durationSecs = secPerStep * 1.5; // brief passing tone
+      melody[midCi].results[midNi].confidence   = 0.0;
+      melody[midCi].results[midNi].isGhost      = true;
+    }
+  }
 }
 
 /**
