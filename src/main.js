@@ -445,7 +445,10 @@ function animationLoop(now) {
 
   // On mobile: cap work to ~30 fps so the CPU runs cooler.
   // We still re-schedule rAF every frame so the loop stays responsive.
-  const dt = _lastAnimTime > 0 ? Math.min(now - _lastAnimTime, 100) : 16.67;
+  // Use a large initial dt so the very first frame always passes the mobile gate.
+  // If we used 16.67 (one 60fps frame) as fallback, it would be < FRAME_TARGET_MS(33)
+  // forever because _lastAnimTime never gets set past the gate — loop stuck on mobile.
+  const dt = _lastAnimTime > 0 ? Math.min(now - _lastAnimTime, 100) : 100;
   if (FRAME_TARGET_MS > 0 && dt < FRAME_TARGET_MS - 1) return;
   _lastAnimTime = now;
 
