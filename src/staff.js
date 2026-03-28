@@ -6,7 +6,7 @@ const ctx = canvas.getContext('2d');
 export { canvas, ctx };
 
 // Overlay visibility flags (toggled via settings)
-export let showClef = true;
+export let showClef = false;
 export let showGrid = false;
 
 export function setShowClef(v) { showClef = v; }
